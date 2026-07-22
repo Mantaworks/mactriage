@@ -18,6 +18,7 @@ import (
 	"github.com/Mantaworks/mactriage/internal/platform"
 	"github.com/Mantaworks/mactriage/internal/present"
 	"github.com/Mantaworks/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/reportutil"
 	"github.com/spf13/cobra"
 )
 
@@ -32,20 +33,26 @@ type Config struct {
 }
 
 type options struct {
-	json       bool
-	output     string
-	verbose    bool
-	plain      bool
-	accessible bool
-	color      string
-	animation  string
-	timeout    time.Duration
+	json         bool
+	output       string
+	verbose      bool
+	plain        bool
+	accessible   bool
+	color        string
+	animation    string
+	timeout      time.Duration
+	totalTimeout time.Duration
+	failOn       string
+	offline      bool
+	redact       string
 }
 
 type application struct {
 	config Config
 	opts   options
 	runner platform.Runner
+	cancel context.CancelFunc
+	ctx    context.Context
 }
 
 func New(config Config) *cobra.Command {
@@ -84,7 +91,21 @@ func New(config Config) *cobra.Command {
 			return nil
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			return app.prepare()
+			if err := app.prepare(); err != nil {
+				return err
+			}
+			if app.opts.totalTimeout > 0 {
+				ctx, cancel := context.WithTimeout(cmd.Context(), app.opts.totalTimeout)
+				app.cancel = cancel
+				cmd.SetContext(ctx)
+			}
+			app.ctx = cmd.Context()
+			return nil
+		},
+		PersistentPostRun: func(*cobra.Command, []string) {
+			if app.cancel != nil {
+				app.cancel()
+			}
 		},
 	}
 	root.SetOut(config.Out)
@@ -98,8 +119,12 @@ func New(config Config) *cobra.Command {
 	flags.StringVar(&app.opts.color, "color", "auto", "color mode: auto, always, or never")
 	flags.StringVar(&app.opts.animation, "animation", "auto", "animation mode: auto, always, or never")
 	flags.DurationVar(&app.opts.timeout, "timeout", 15*time.Second, "timeout for each macOS evidence command")
+	flags.DurationVar(&app.opts.totalTimeout, "total-timeout", 0, "maximum total command duration (0 disables the overall limit)")
+	flags.StringVar(&app.opts.failOn, "fail-on", "error", "return exit 1 at this severity: warning, error, or critical")
+	flags.BoolVar(&app.opts.offline, "offline", false, "skip checks that require network access")
+	flags.StringVar(&app.opts.redact, "redact", "standard", "report redaction: standard or strict")
 
-	root.AddCommand(app.doctorCommand(), app.networkCommand(), app.relaunchCommand(), app.baselineCommand(), app.shareCommand(), app.diagnoseCommand(), app.collectCommand(), app.hangCommand(), app.permissionsCommand(), app.scanCommand(), app.compareCommand(), app.explainCommand(), app.summarizeCommand(), app.systemCommand(), app.watchCommand(), app.repairCommand(), app.completionCommand(root), app.versionCommand())
+	root.AddCommand(app.doctorCommand(), app.storageCommand(), app.startupCommand(), app.networkCommand(), app.relaunchCommand(), app.baselineCommand(), app.shareCommand(), app.diagnoseCommand(), app.collectCommand(), app.hangCommand(), app.permissionsCommand(), app.scanCommand(), app.compareCommand(), app.explainCommand(), app.summarizeCommand(), app.systemCommand(), app.watchCommand(), app.repairCommand(), app.schemaCommand(), app.completionCommand(root), app.versionCommand())
 	return root
 }
 
@@ -117,6 +142,10 @@ func Execute(ctx context.Context, config Config, args []string) int {
 	if errors.Is(err, context.Canceled) {
 		return 130
 	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		fmt.Fprintln(configWriter(config.Err, os.Stderr), "Error: total command timeout exceeded")
+		return 2
+	}
 	fmt.Fprintf(configWriter(config.Err, os.Stderr), "Error: %v\n", err)
 	return 2
 }
@@ -127,6 +156,15 @@ func (a *application) prepare() error {
 	}
 	if !oneOf(a.opts.animation, "auto", "always", "never") {
 		return fmt.Errorf("invalid --animation value %q (use auto, always, or never)", a.opts.animation)
+	}
+	if !oneOf(a.opts.failOn, "warning", "error", "critical") {
+		return errors.New("--fail-on must be warning, error, or critical")
+	}
+	if !oneOf(a.opts.redact, "standard", "strict") {
+		return errors.New("--redact must be standard or strict")
+	}
+	if a.opts.totalTimeout < 0 || a.opts.totalTimeout > 30*time.Minute {
+		return errors.New("--total-timeout must be between 0 and 30m")
 	}
 	if a.opts.timeout < time.Second || a.opts.timeout > 5*time.Minute {
 		return errors.New("--timeout must be between 1s and 5m")
@@ -170,6 +208,10 @@ func (a *application) setExit(cmd *cobra.Command, code int) {
 		root.Annotations = map[string]string{}
 	}
 	root.Annotations["exit_code"] = strconv.Itoa(code)
+}
+
+func (a *application) setReportExit(cmd *cobra.Command, r report.Report) {
+	a.setExit(cmd, r.ExitCodeAt(report.Severity(a.opts.failOn)))
 }
 
 func (a *application) diagnoseCommand() *cobra.Command {
@@ -217,7 +259,7 @@ func (a *application) diagnoseCommand() *cobra.Command {
 					r = *rechecked
 				}
 			}
-			a.setExit(cmd, r.ExitCode())
+			a.setReportExit(cmd, r)
 			return nil
 		},
 	}
@@ -349,7 +391,7 @@ func (a *application) systemCommand() *cobra.Command {
 			if err := a.renderReport(r); err != nil {
 				return err
 			}
-			a.setExit(cmd, r.ExitCode())
+			a.setReportExit(cmd, r)
 			return nil
 		},
 	}
@@ -397,6 +439,11 @@ func (a *application) watchCommand() *cobra.Command {
 				defer stream.Abort()
 			}
 			emit := func(event macos.WatchEvent) error {
+				if a.opts.redact == "strict" {
+					event.Target = "<redacted>"
+					event.ByPath = nil
+					event.Message = strings.ReplaceAll(event.Message, target, "<redacted>")
+				}
 				if stream != nil {
 					if err := present.NDJSON(stream.file, event); err != nil {
 						return err
@@ -502,7 +549,7 @@ func (a *application) repairCommand() *cobra.Command {
 			if renderErr := a.renderReport(r); renderErr != nil {
 				return renderErr
 			}
-			a.setExit(cmd, r.ExitCode())
+			a.setReportExit(cmd, r)
 			return nil
 		},
 	}
@@ -559,6 +606,10 @@ func (a *application) versionCommand() *cobra.Command {
 }
 
 func (a *application) renderReport(r report.Report) error {
+	if a.ctx != nil && a.ctx.Err() != nil {
+		return a.ctx.Err()
+	}
+	r = a.redactReport(r)
 	if a.opts.output != "" {
 		if err := present.WriteAtomic(a.opts.output, 0o600, func(w io.Writer) error { return present.JSON(w, r) }); err != nil {
 			return fmt.Errorf("write report: %w", err)
@@ -567,7 +618,17 @@ func (a *application) renderReport(r report.Report) error {
 	return a.renderReportOnly(r)
 }
 
+func (a *application) redactReport(r report.Report) report.Report {
+	if a.opts.redact == "strict" {
+		return reportutil.RedactStrict(r)
+	}
+	return r
+}
+
 func (a *application) renderReportOnly(r report.Report) error {
+	if a.ctx != nil && a.ctx.Err() != nil {
+		return a.ctx.Err()
+	}
 	if a.opts.json {
 		return present.JSON(a.config.Out, r)
 	}

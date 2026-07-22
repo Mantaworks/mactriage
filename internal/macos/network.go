@@ -8,13 +8,15 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Mantaworks/mactriage/internal/platform"
 	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 type NetworkInspector struct {
-	Runner platform.Runner
+	Runner   platform.Runner
+	Detailed bool
 }
 
 func (n NetworkInspector) Inspect(ctx context.Context, target string) (report.Report, error) {
@@ -33,6 +35,33 @@ func (n NetworkInspector) Inspect(ctx context.Context, target string) (report.Re
 	route := n.Runner.Run(ctx, "/sbin/route", "-n", "get", "default")
 	data.RouteStatus = networkProbeStatus(route, true)
 	data.DefaultRoute = route.Err == nil && strings.Contains(strings.ToLower(route.Stdout), "gateway:")
+	if n.Detailed {
+		data.ClockPlausible = time.Now().Year() >= 2024
+		iface := routeInterface(route.Stdout)
+		data.InterfaceStatus = data.RouteStatus
+		data.ActiveInterface = iface != ""
+		if iface != "" {
+			address := n.Runner.Run(ctx, "/usr/sbin/ipconfig", "getifaddr", iface)
+			data.InterfaceStatus = networkProbeStatus(address, true)
+			data.SelfAssigned = strings.HasPrefix(strings.TrimSpace(address.Stdout), "169.254.")
+		}
+		hardware := n.Runner.Run(ctx, "/usr/sbin/networksetup", "-listallhardwareports")
+		wifi := wifiDevice(hardware.Stdout)
+		data.WiFiStatus = networkProbeStatus(hardware, false)
+		if wifi != "" {
+			power := n.Runner.Run(ctx, "/usr/sbin/networksetup", "-getairportpower", wifi)
+			associated := n.Runner.Run(ctx, "/usr/sbin/networksetup", "-getairportnetwork", wifi)
+			data.WiFiStatus = networkProbeStatus(power, false)
+			data.WiFiPowered = strings.Contains(strings.ToLower(power.Stdout), ": on")
+			data.WiFiAssociated = associated.Err == nil && !strings.Contains(strings.ToLower(associated.Stdout), "not associated")
+		}
+		dnsConfig := n.Runner.Run(ctx, "/usr/sbin/scutil", "--dns")
+		data.DNSConfigStatus = networkProbeStatus(dnsConfig, false)
+		data.DNSServerCount = strings.Count(dnsConfig.Stdout, "nameserver[")
+		httpProbe := n.Runner.Run(ctx, "/usr/bin/curl", "--silent", "--show-error", "--head", "--output", "/dev/null", "--connect-timeout", "5", "--max-time", "8", "http://example.com/")
+		data.HTTPStatus = networkProbeStatus(httpProbe, true)
+		data.HTTPReachable = httpProbe.Err == nil
+	}
 
 	proxy := n.Runner.Run(ctx, "/usr/sbin/scutil", "--proxy")
 	data.ProxyStatus = networkProbeStatus(proxy, false)
@@ -77,7 +106,11 @@ func (n NetworkInspector) Inspect(ctx context.Context, target string) (report.Re
 	r := report.New("network", host)
 	r.Host = (Collector{Runner: n.Runner}).host(ctx)
 	status := report.StatusOK
-	for _, probeStatus := range []report.Status{data.DNSStatus, data.RouteStatus, data.ProxyStatus, data.VPNStatus, data.HTTPSStatus, data.ListenersStatus} {
+	statuses := []report.Status{data.DNSStatus, data.RouteStatus, data.ProxyStatus, data.VPNStatus, data.HTTPSStatus, data.ListenersStatus}
+	if n.Detailed {
+		statuses = append(statuses, data.InterfaceStatus, data.WiFiStatus, data.DNSConfigStatus, data.HTTPStatus)
+	}
+	for _, probeStatus := range statuses {
 		if incompleteStatus(probeStatus) {
 			status = report.StatusPartial
 			break
@@ -85,6 +118,28 @@ func (n NetworkInspector) Inspect(ctx context.Context, target string) (report.Re
 	}
 	r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidenceNetwork, Status: status, Summary: fmt.Sprintf("Collected DNS, routing, proxy, VPN, HTTPS, TLS, and listening-socket facts for %s", host), Data: data})
 	return r, nil
+}
+
+func routeInterface(output string) string {
+	match := regexp.MustCompile(`(?m)^\s*interface:\s*([a-zA-Z0-9]+)`).FindStringSubmatch(output)
+	if len(match) == 2 {
+		return match[1]
+	}
+	return ""
+}
+
+func wifiDevice(output string) string {
+	blocks := strings.Split(output, "Hardware Port:")
+	for _, block := range blocks {
+		if !strings.HasPrefix(strings.TrimSpace(block), "Wi-Fi") {
+			continue
+		}
+		match := regexp.MustCompile(`(?m)^Device:\s*([a-zA-Z0-9]+)`).FindStringSubmatch(strings.TrimSpace(block))
+		if len(match) == 2 {
+			return match[1]
+		}
+	}
+	return ""
 }
 
 func networkProbeStatus(result platform.Result, commandExitIsObservation bool) report.Status {

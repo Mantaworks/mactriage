@@ -62,6 +62,11 @@ const (
 	CodeNetworkProxyDetected        = "network.proxy_detected"
 	CodeNetworkVPNDetected          = "network.vpn_detected"
 	CodeNetworkListenersHigh        = "network.listeners_high"
+	CodeNetworkSelfAssigned         = "network.self_assigned"
+	CodeNetworkCaptivePortal        = "network.captive_portal_suspected"
+	CodeDoctorBatteryHealth         = "doctor.battery_health"
+	CodeDoctorThermalPressure       = "doctor.thermal_pressure"
+	CodeDoctorBackupStale           = "doctor.backup_stale"
 	CodeRelaunchFailed              = "relaunch.failed"
 )
 
@@ -119,6 +124,11 @@ var entries = map[string]Entry{
 	CodeNetworkProxyDetected:        entry("Network proxy is configured", "A system HTTP, HTTPS, or SOCKS proxy is enabled.", "Confirm the proxy is expected and available."),
 	CodeNetworkVPNDetected:          entry("VPN interface is active", "One or more tunnel interfaces are present and may affect routing or DNS.", "Compare the result with the VPN disconnected only if your policy permits it."),
 	CodeNetworkListenersHigh:        entry("Many listening sockets are open", "The Mac has an unusually high number of listening TCP descriptors.", "Use system monitoring to identify the largest socket owners."),
+	CodeNetworkSelfAssigned:         entry("Self-assigned network address", "The active interface has a 169.254 address, usually because it did not receive an address from the network.", "Reconnect to the network and review its DHCP service."),
+	CodeNetworkCaptivePortal:        entry("Network sign-in may be required", "Plain HTTP worked while HTTPS did not, which can indicate a captive network sign-in page.", "Open a browser and complete the network sign-in if expected."),
+	CodeDoctorBatteryHealth:         entry("Battery service may be recommended", "The battery reports reduced maximum capacity or a non-normal condition.", "Review Battery settings and Apple service guidance."),
+	CodeDoctorThermalPressure:       entry("Thermal limits are active", "macOS reports a recorded thermal warning or reduced CPU scheduling limits.", "Improve airflow and recheck after the Mac cools."),
+	CodeDoctorBackupStale:           entry("Time Machine backup is stale", "The configured Time Machine destination has no recent successful backup.", "Open Time Machine settings and review the latest backup attempt."),
 	CodeRelaunchFailed:              entry("Application relaunch failed", "The app did not quit, reopen, or remain running through verification.", "Review the reported step and diagnose the app before trying again."),
 }
 

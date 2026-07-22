@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Mantaworks/mactriage/internal/cli"
 	"github.com/Mantaworks/mactriage/internal/platform"
@@ -21,11 +22,58 @@ func TestHelpExposesApprovedCommandSurface(t *testing.T) {
 		t.Fatalf("ExecuteContext returned error: %v", err)
 	}
 	help := out.String()
-	for _, command := range []string{"doctor", "network", "relaunch", "baseline", "share", "diagnose", "collect", "hang", "permissions", "scan", "compare", "explain", "summarize", "system", "watch", "repair", "completion", "version"} {
+	for _, command := range []string{"doctor", "storage", "startup", "network", "relaunch", "baseline", "share", "diagnose", "collect", "hang", "permissions", "scan", "compare", "explain", "summarize", "schema", "system", "watch", "repair", "completion", "version"} {
 		if !strings.Contains(help, command) {
 			t.Fatalf("help missing %q:\n%s", command, help)
 		}
 	}
+}
+
+func TestAutomationFlagsSchemaOfflineAndStrictRedaction(t *testing.T) {
+	var out, errOut bytes.Buffer
+	if code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: warningCLIRunner{}}, []string{"--json", "--fail-on", "warning", "doctor", "--only", "storage"}); code != 1 {
+		t.Fatalf("warning threshold code=%d stderr=%q", code, errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: systemRunner{}}, []string{"--offline", "network"}); code != 2 || !strings.Contains(errOut.String(), "cannot run with --offline") {
+		t.Fatalf("offline code=%d stderr=%q", code, errOut.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: systemRunner{}}, []string{"schema", "report"}); code != 0 || !strings.Contains(out.String(), `"case_id"`) {
+		t.Fatalf("schema code=%d output=%q", code, out.String())
+	}
+	out.Reset()
+	errOut.Reset()
+	if code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: systemRunner{}}, []string{"--json", "--redact", "strict", "diagnose", "/Applications/Secret.app", "--no-launch"}); code != 1 || strings.Contains(out.String(), "Secret") {
+		t.Fatalf("redaction code=%d output=%q", code, out.String())
+	}
+}
+
+func TestTotalTimeoutStopsReportCommands(t *testing.T) {
+	var out, errOut bytes.Buffer
+	started := time.Now()
+	code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: blockingRunner{}}, []string{"--json", "--total-timeout", "10ms", "doctor", "--quick"})
+	if code != 2 || time.Since(started) > time.Second || !strings.Contains(errOut.String(), "timeout") {
+		t.Fatalf("code=%d elapsed=%s stderr=%q", code, time.Since(started), errOut.String())
+	}
+}
+
+type blockingRunner struct{}
+
+func (blockingRunner) Run(ctx context.Context, _ string, _ ...string) platform.Result {
+	<-ctx.Done()
+	return platform.Result{Err: ctx.Err(), TimedOut: true, ExitCode: -1}
+}
+
+type warningCLIRunner struct{ systemRunner }
+
+func (warningCLIRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	if path == "/bin/df" {
+		return platform.Result{Stdout: "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk 1000000 900000 100000 90% /\n"}
+	}
+	return (systemRunner{}).Run(ctx, path, args...)
 }
 
 func TestShareCreatesSanitizedMarkdownWithoutCopyingNoninteractively(t *testing.T) {

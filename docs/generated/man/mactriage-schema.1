@@ -1,0 +1,71 @@
+.nh
+.TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
+
+.SH NAME
+mactriage-schema - Print a machine-readable JSON Schema
+
+
+.SH SYNOPSIS
+\fBmactriage schema [report|watch] [flags]\fP
+
+
+.SH DESCRIPTION
+Print a machine-readable JSON Schema
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for schema
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--accessible\fP[=false]
+	use screen-reader-friendly prompts and static progress
+
+.PP
+\fB--animation\fP="auto"
+	animation mode: auto, always, or never
+
+.PP
+\fB--color\fP="auto"
+	color mode: auto, always, or never
+
+.PP
+\fB--fail-on\fP="error"
+	return exit 1 at this severity: warning, error, or critical
+
+.PP
+\fB--json\fP[=false]
+	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB--offline\fP[=false]
+	skip checks that require network access
+
+.PP
+\fB-o\fP, \fB--output\fP=""
+	write the command's private report or artifact to PATH
+
+.PP
+\fB--plain\fP[=false]
+	disable color, animation, and terminal UI control sequences
+
+.PP
+\fB--redact\fP="standard"
+	report redaction: standard or strict
+
+.PP
+\fB--timeout\fP=15s
+	timeout for each macOS evidence command
+
+.PP
+\fB--total-timeout\fP=0s
+	maximum total command duration (0 disables the overall limit)
+
+.PP
+\fB-v\fP, \fB--verbose\fP[=false]
+	show the macOS commands being run on stderr
+
+
+.SH SEE ALSO
+\fBmactriage(1)\fP

@@ -1,9 +1,11 @@
 package reportutil_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Mantaworks/mactriage/internal/report"
@@ -23,6 +25,23 @@ func TestCompareReportsTracksFindingAndEvidenceChanges(t *testing.T) {
 	}
 	if len(comparison.EvidenceChanges) != 1 || comparison.EvidenceChanges[0].Before != report.StatusFailed || comparison.EvidenceChanges[0].After != report.StatusOK {
 		t.Fatalf("unexpected evidence changes: %#v", comparison.EvidenceChanges)
+	}
+}
+
+func TestStrictRedactionRemovesNamesAndPathsButKeepsCodes(t *testing.T) {
+	r := report.New("diagnose", "Secret App")
+	r.Evidence = []report.Evidence{{ID: report.EvidenceBundle, Status: report.StatusOK, Summary: "Found Secret App", Data: report.BundleData{Path: "/Applications/Secret App.app", Name: "Secret App", BundleID: "com.secret.app"}}}
+	r.Findings = []report.Finding{{Code: "bundle.invalid", Explanation: "Secret App at /Applications/Secret App.app", Subjects: []string{"Secret App"}}}
+	redacted := reportutil.RedactStrict(r)
+	data, _ := json.Marshal(redacted)
+	text := string(data)
+	for _, forbidden := range []string{"Secret App", "/Applications/Secret App.app", "com.secret.app"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("strict report leaked %q: %s", forbidden, text)
+		}
+	}
+	if !strings.Contains(text, "bundle.invalid") {
+		t.Fatalf("strict report removed code: %s", text)
 	}
 }
 

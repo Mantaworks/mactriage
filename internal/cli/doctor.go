@@ -17,12 +17,26 @@ import (
 func (a *application) doctorCommand() *cobra.Command {
 	var severity string
 	var only, skip []string
-	var fix bool
+	var fix, quick, full bool
+	var profile string
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Run a guided whole-Mac health check",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if quick && full {
+				return errors.New("--quick and --full cannot be used together")
+			}
+			if (quick || full) && cmd.Flags().Changed("profile") {
+				return errors.New("use either --profile or --quick/--full")
+			}
+			selectedProfile := macos.DoctorProfile(profile)
+			if quick {
+				selectedProfile = macos.DoctorProfileQuick
+			}
+			if full {
+				selectedProfile = macos.DoctorProfileFull
+			}
 			minimum, err := parseSeverity(severity)
 			if err != nil {
 				return err
@@ -31,7 +45,7 @@ func (a *application) doctorCommand() *cobra.Command {
 				doctor := macos.Doctor{Runner: a.runner, Emit: func(event macos.ProgressEvent) {
 					emit(present.ProgressEvent{ID: event.ID, Label: event.Label, Status: event.Status, Duration: event.Duration})
 				}}
-				r, inspectErr := doctor.Inspect(cmd.Context(), macos.DoctorOptions{Only: only, Skip: skip})
+				r, inspectErr := doctor.Inspect(cmd.Context(), macos.DoctorOptions{Only: only, Skip: skip, Profile: selectedProfile, Offline: a.opts.offline})
 				if inspectErr != nil {
 					return report.Report{}, inspectErr
 				}
@@ -74,7 +88,7 @@ func (a *application) doctorCommand() *cobra.Command {
 					r = *rechecked
 				}
 			}
-			a.setExit(cmd, r.ExitCode())
+			a.setReportExit(cmd, r)
 			return nil
 		},
 	}
@@ -82,6 +96,9 @@ func (a *application) doctorCommand() *cobra.Command {
 	cmd.Flags().StringSliceVar(&only, "only", nil, "run only these checks: "+strings.Join(macos.DoctorChecks, ","))
 	cmd.Flags().StringSliceVar(&skip, "skip", nil, "skip these checks: "+strings.Join(macos.DoctorChecks, ","))
 	cmd.Flags().BoolVar(&fix, "fix", false, "interactively offer eligible safe actions (each still requires confirmation)")
+	cmd.Flags().StringVar(&profile, "profile", "full", "check profile: quick, full, or fleet")
+	cmd.Flags().BoolVar(&quick, "quick", false, "run the fast everyday check profile")
+	cmd.Flags().BoolVar(&full, "full", false, "run every available check")
 	return cmd
 }
 

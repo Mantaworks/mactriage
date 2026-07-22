@@ -1,6 +1,12 @@
 package report
 
-import "time"
+import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"strings"
+	"time"
+)
 
 const SchemaVersion = "1"
 
@@ -42,6 +48,10 @@ const (
 	EvidenceNetwork       EvidenceID = "network"
 	EvidenceRestartLoops  EvidenceID = "restart_loops"
 	EvidenceRelaunch      EvidenceID = "relaunch"
+	EvidenceBattery       EvidenceID = "battery"
+	EvidenceThermal       EvidenceID = "thermal"
+	EvidenceBackup        EvidenceID = "backup"
+	EvidenceStorageDetail EvidenceID = "storage_details"
 )
 
 const (
@@ -270,6 +280,42 @@ type StorageData struct {
 	AvailablePercent float64 `json:"available_percent"`
 }
 
+type StorageCategory struct {
+	Name  string `json:"name"`
+	Bytes uint64 `json:"bytes"`
+}
+
+type StorageDetailsData struct {
+	evidenceMarker
+	Categories []StorageCategory `json:"categories"`
+}
+
+type BatteryData struct {
+	evidenceMarker
+	Present       bool    `json:"present"`
+	Percent       int     `json:"percent,omitempty"`
+	Charging      bool    `json:"charging"`
+	CycleCount    int     `json:"cycle_count,omitempty"`
+	HealthPercent float64 `json:"health_percent,omitempty"`
+	Condition     string  `json:"condition,omitempty"`
+}
+
+type ThermalData struct {
+	evidenceMarker
+	CPUSpeedLimit   int  `json:"cpu_speed_limit,omitempty"`
+	SchedulerLimit  int  `json:"scheduler_limit,omitempty"`
+	CPUAvailable    int  `json:"cpu_available,omitempty"`
+	WarningRecorded bool `json:"warning_recorded"`
+}
+
+type BackupData struct {
+	evidenceMarker
+	Configured       bool    `json:"configured"`
+	HasBackup        bool    `json:"has_backup"`
+	LatestAgeHours   float64 `json:"latest_age_hours,omitempty"`
+	DestinationCount int     `json:"destination_count,omitempty"`
+}
+
 type MemoryData struct {
 	evidenceMarker
 	TotalBytes    uint64  `json:"total_bytes"`
@@ -306,8 +352,15 @@ type RecentCrashesData struct {
 
 type StartupItemsData struct {
 	evidenceMarker
-	Count  int    `json:"count"`
-	Source string `json:"source"`
+	Count  int           `json:"count"`
+	Source string        `json:"source"`
+	Items  []StartupItem `json:"items,omitempty"`
+}
+
+type StartupItem struct {
+	Name       string `json:"name,omitempty"`
+	Identifier string `json:"identifier,omitempty"`
+	TeamID     string `json:"team_id,omitempty"`
 }
 
 type NetworkData struct {
@@ -326,6 +379,17 @@ type NetworkData struct {
 	VPNInterfaces        []string `json:"vpn_interfaces,omitempty"`
 	ListenersStatus      Status   `json:"listeners_status"`
 	ListeningSocketCount int      `json:"listening_socket_count"`
+	InterfaceStatus      Status   `json:"interface_status,omitempty"`
+	ActiveInterface      bool     `json:"active_interface"`
+	SelfAssigned         bool     `json:"self_assigned"`
+	WiFiStatus           Status   `json:"wifi_status,omitempty"`
+	WiFiPowered          bool     `json:"wifi_powered"`
+	WiFiAssociated       bool     `json:"wifi_associated"`
+	DNSConfigStatus      Status   `json:"dns_config_status,omitempty"`
+	DNSServerCount       int      `json:"dns_server_count"`
+	HTTPStatus           Status   `json:"http_status,omitempty"`
+	HTTPReachable        bool     `json:"http_reachable"`
+	ClockPlausible       bool     `json:"clock_plausible"`
 }
 
 type ProcessRestartObservation struct {
@@ -377,6 +441,7 @@ type Action struct {
 
 type Report struct {
 	SchemaVersion string       `json:"schema_version"`
+	CaseID        string       `json:"case_id"`
 	Command       string       `json:"command"`
 	GeneratedAt   time.Time    `json:"generated_at"`
 	Target        string       `json:"target,omitempty"`
@@ -390,6 +455,7 @@ type Report struct {
 func New(command, target string) Report {
 	return Report{
 		SchemaVersion: SchemaVersion,
+		CaseID:        newCaseID(),
 		Command:       command,
 		GeneratedAt:   time.Now().UTC(),
 		Target:        target,
@@ -400,9 +466,26 @@ func New(command, target string) Report {
 	}
 }
 
+func newCaseID() string {
+	var value [6]byte
+	if _, err := rand.Read(value[:]); err == nil {
+		return "MT-" + strings.ToUpper(hex.EncodeToString(value[:]))
+	}
+	return fmt.Sprintf("MT-%X", time.Now().UTC().UnixNano())
+}
+
 func (r Report) ExitCode() int {
+	return r.ExitCodeAt(Error)
+}
+
+func (r Report) ExitCodeAt(threshold Severity) int {
+	weights := map[Severity]int{Info: 0, Warning: 1, Error: 2, Critical: 3}
+	minimum, ok := weights[threshold]
+	if !ok {
+		minimum = weights[Error]
+	}
 	for _, finding := range r.Findings {
-		if finding.Severity == Error || finding.Severity == Critical {
+		if weights[finding.Severity] >= minimum {
 			return 1
 		}
 	}

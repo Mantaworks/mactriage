@@ -52,6 +52,7 @@ func (a *application) summarizeCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("read report: %w", err)
 			}
+			r = a.redactReport(r)
 			markdown := support.MarkdownSummary(r)
 			value := struct {
 				SchemaVersion string `json:"schema_version"`
@@ -96,6 +97,7 @@ func (a *application) compareCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("read after report: %w", err)
 			}
+			before, after = a.redactReport(before), a.redactReport(after)
 			comparison := reportutil.Compare(before, after)
 			if a.opts.output != "" {
 				if err := present.WriteAtomic(a.opts.output, 0o600, func(w io.Writer) error { return json.NewEncoder(w).Encode(comparison) }); err != nil {

@@ -18,12 +18,24 @@ Run a guided whole-Mac health check
 	interactively offer eligible safe actions (each still requires confirmation)
 
 .PP
+\fB--full\fP[=false]
+	run every available check
+
+.PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for doctor
 
 .PP
 \fB--only\fP=[]
-	run only these checks: storage,memory,cpu,descriptors,services,updates,crashes,restarts,startup,apps,network
+	run only these checks: storage,memory,cpu,descriptors,services,updates,crashes,restarts,startup,apps,network,battery,thermal,backup
+
+.PP
+\fB--profile\fP="full"
+	check profile: quick, full, or fleet
+
+.PP
+\fB--quick\fP[=false]
+	run the fast everyday check profile
 
 .PP
 \fB--severity\fP="info"
@@ -31,7 +43,7 @@ Run a guided whole-Mac health check
 
 .PP
 \fB--skip\fP=[]
-	skip these checks: storage,memory,cpu,descriptors,services,updates,crashes,restarts,startup,apps,network
+	skip these checks: storage,memory,cpu,descriptors,services,updates,crashes,restarts,startup,apps,network,battery,thermal,backup
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
@@ -47,8 +59,16 @@ Run a guided whole-Mac health check
 	color mode: auto, always, or never
 
 .PP
+\fB--fail-on\fP="error"
+	return exit 1 at this severity: warning, error, or critical
+
+.PP
 \fB--json\fP[=false]
 	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB--offline\fP[=false]
+	skip checks that require network access
 
 .PP
 \fB-o\fP, \fB--output\fP=""
@@ -59,8 +79,16 @@ Run a guided whole-Mac health check
 	disable color, animation, and terminal UI control sequences
 
 .PP
+\fB--redact\fP="standard"
+	report redaction: standard or strict
+
+.PP
 \fB--timeout\fP=15s
 	timeout for each macOS evidence command
+
+.PP
+\fB--total-timeout\fP=0s
+	maximum total command duration (0 disables the overall limit)
 
 .PP
 \fB-v\fP, \fB--verbose\fP[=false]

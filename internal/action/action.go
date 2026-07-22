@@ -191,6 +191,16 @@ func (e Executor) openSoftwareUpdate(ctx context.Context) error {
 	return nil
 }
 
+func (e Executor) openAndVerify(ctx context.Context, process string, args ...string) error {
+	if result := e.Runner.Run(ctx, "/usr/bin/open", args...); result.Err != nil {
+		return result.Err
+	}
+	if err := e.waitForProcess(ctx, process, 5*time.Second); err != nil {
+		return fmt.Errorf("verify %s: %w", process, err)
+	}
+	return nil
+}
+
 func (e Executor) launchRosetta(ctx context.Context, target string) error {
 	return e.Runner.Run(ctx, "/usr/bin/open", "-a", target).Err
 }

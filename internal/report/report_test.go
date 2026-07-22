@@ -1,6 +1,7 @@
 package report_test
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/Mantaworks/mactriage/internal/report"
@@ -38,5 +39,18 @@ func TestNewSetsStableSchemaDefaults(t *testing.T) {
 	}
 	if r.GeneratedAt.IsZero() {
 		t.Fatal("GeneratedAt must be populated")
+	}
+	if !regexp.MustCompile(`^MT-[A-F0-9]+$`).MatchString(r.CaseID) {
+		t.Fatalf("CaseID = %q", r.CaseID)
+	}
+}
+
+func TestExitCodeAtSupportsAutomationThreshold(t *testing.T) {
+	r := report.Report{Completeness: report.Complete, Findings: []report.Finding{{Severity: report.Warning}}}
+	if got := r.ExitCodeAt(report.Warning); got != 1 {
+		t.Fatalf("warning threshold=%d", got)
+	}
+	if got := r.ExitCodeAt(report.Error); got != 0 {
+		t.Fatalf("error threshold=%d", got)
 	}
 }

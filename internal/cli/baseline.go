@@ -42,6 +42,7 @@ func (a *application) baselineSaveCommand() *cobra.Command {
 				return err
 			}
 			r = diagnosis.Analyze(r)
+			r = a.redactReport(r)
 			path, err := a.baselineStore().Save(name, r)
 			if err != nil {
 				return err
@@ -55,7 +56,7 @@ func (a *application) baselineSaveCommand() *cobra.Command {
 			if err := a.writeManagementResult(value, func(w io.Writer) { fmt.Fprintf(w, "Saved private baseline %q to %s\n", name, path) }); err != nil {
 				return err
 			}
-			a.setExit(cmd, r.ExitCode())
+			a.setReportExit(cmd, r)
 			return nil
 		},
 	}
@@ -117,6 +118,7 @@ func (a *application) baselineCompareCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			before, after = a.redactReport(before), a.redactReport(after)
 			comparison := reportutil.Compare(before, after)
 			if a.opts.output != "" {
 				if err := present.WriteAtomic(a.opts.output, 0o600, func(w io.Writer) error { return json.NewEncoder(w).Encode(comparison) }); err != nil {

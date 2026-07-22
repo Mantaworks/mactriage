@@ -27,6 +27,7 @@ func (a *application) shareCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			r = a.redactReport(r)
 			markdown := support.MarkdownSummary(r)
 			if a.opts.output != "" {
 				if err := present.WriteAtomic(a.opts.output, 0o600, func(w io.Writer) error {
