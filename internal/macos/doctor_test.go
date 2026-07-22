@@ -26,7 +26,7 @@ func TestDoctorCollectsTypedMacHealthEvidence(t *testing.T) {
 		t.Fatalf("unexpected memory facts: %#v", memory)
 	}
 	restarts := evidenceData[report.RestartLoopsData](t, r, report.EvidenceRestartLoops)
-	if len(restarts.Processes) != 1 || restarts.Processes[0].Name != "com.example.Helper" || restarts.Processes[0].Count != 3 {
+	if len(restarts.Processes) != 2 || restarts.Processes[0].Name != "com.example.Helper" || restarts.Processes[0].Count != 3 || restarts.Processes[1].Name != "com.example.Once" || restarts.Processes[1].Count != 1 {
 		t.Fatalf("unexpected restart facts: %#v", restarts)
 	}
 }
@@ -88,7 +88,7 @@ func (doctorRunner) Run(_ context.Context, path string, args ...string) platform
 	case "/usr/bin/sfltool":
 		return platform.Result{Stdout: "UUID: one\nUUID: two\n"}
 	case "/usr/bin/log":
-		return platform.Result{Stdout: "{\"eventMessage\":\"service com.example.Helper exited\"}\n{\"eventMessage\":\"service com.example.Helper exited\"}\n{\"eventMessage\":\"service com.example.Helper exited\"}\n"}
+		return platform.Result{Stdout: "{\"eventMessage\":\"service com.example.Helper exited\"}\n{\"eventMessage\":\"service com.example.Helper exited\"}\n{\"eventMessage\":\"service com.example.Helper exited\"}\n{\"eventMessage\":\"service com.example.Once exited\"}\n"}
 	case "/usr/bin/sw_vers":
 		return platform.Result{Stdout: "14.5\n"}
 	case "/usr/bin/uname":

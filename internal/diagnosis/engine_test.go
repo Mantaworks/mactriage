@@ -138,7 +138,7 @@ func TestAnalyzeDoctorRanksEverydayHealthProblems(t *testing.T) {
 	r.Evidence = []report.Evidence{
 		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 5}},
 		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{FreePercent: 4, SwapUsedBytes: 6 << 30}},
-		{ID: report.EvidenceCPU, Status: report.StatusOK, Data: report.CPUData{LogicalCores: 4, LoadOne: 9, HighestPercent: 97, HighestProcess: "Example", StalledProcesses: 1}},
+		{ID: report.EvidenceCPU, Status: report.StatusOK, Data: report.CPUData{LogicalCores: 4, LoadOne: 9, HighestPercent: 97, HighestProcess: "Example", ProcessStates: map[string]int{"D": 1}}},
 		{ID: report.EvidenceServices, Status: report.StatusOK, Data: report.ServicesData{Running: map[string]bool{"syspolicyd": false, "trustd": true}}},
 		{ID: report.EvidenceUpdates, Status: report.StatusOK, Data: report.UpdatesData{Available: true}},
 		{ID: report.EvidenceRecentCrashes, Status: report.StatusOK, Data: report.RecentCrashesData{Count: 12}},
@@ -173,13 +173,36 @@ func TestAnalyzeDoctorRanksEverydayHealthProblems(t *testing.T) {
 func TestAnalyzeNetworkDistinguishesConnectivityAndConfiguration(t *testing.T) {
 	r := report.New("network", "example.com")
 	r.Evidence = []report.Evidence{{ID: report.EvidenceNetwork, Status: report.StatusOK, Data: report.NetworkData{
-		Host: "example.com", DefaultRoute: true, HTTPSReachable: true, TLSValid: false, ProxyConfigured: true, VPNInterfaces: []string{"utun3"},
+		Host: "example.com", DNSStatus: report.StatusOK, RouteStatus: report.StatusOK, ProxyStatus: report.StatusOK, VPNStatus: report.StatusOK, HTTPSStatus: report.StatusOK, ListenersStatus: report.StatusOK,
+		DefaultRoute: true, HTTPSReachable: true, TLSValid: false, ProxyConfigured: true, VPNInterfaces: []string{"utun3"},
 	}}}
 	got := diagnosis.Analyze(r)
 	assertFinding(t, got, "network.dns_failed", report.Error)
 	assertFinding(t, got, "network.tls_invalid", report.Error)
 	assertFinding(t, got, "network.proxy_detected", report.Info)
 	assertFinding(t, got, "network.vpn_detected", report.Info)
+}
+
+func TestAnalyzeNetworkDoesNotDiagnoseUnavailableProbes(t *testing.T) {
+	r := report.New("network", "example.com")
+	r.Evidence = []report.Evidence{{ID: report.EvidenceNetwork, Status: report.StatusPartial, Data: report.NetworkData{
+		Host: "example.com", DNSStatus: report.StatusUnavailable, RouteStatus: report.StatusUnavailable, HTTPSStatus: report.StatusTimedOut,
+	}}}
+	got := diagnosis.Analyze(r)
+	if len(got.Findings) != 0 || got.Completeness != report.Partial || got.ExitCode() != 3 {
+		t.Fatalf("unavailable probes became diagnoses: %#v", got)
+	}
+}
+
+func TestAnalyzeRestartRequiresRepeatedObservations(t *testing.T) {
+	r := report.New("doctor", "this Mac")
+	r.Evidence = []report.Evidence{{ID: report.EvidenceRestartLoops, Status: report.StatusOK, Data: report.RestartLoopsData{Processes: []report.ProcessRestartObservation{{Name: "Example", Count: 2}}}}}
+	got := diagnosis.Analyze(r)
+	for _, finding := range got.Findings {
+		if finding.Code == "doctor.restart_loop" {
+			t.Fatalf("two exit observations classified as a restart loop: %#v", got.Findings)
+		}
+	}
 }
 
 func assertFinding(t *testing.T, r report.Report, code string, severity report.Severity) {

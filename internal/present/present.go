@@ -88,20 +88,13 @@ func doctorSnapshot(w io.Writer, r report.Report) {
 		case report.CPUData:
 			fmt.Fprintf(w, "  CPU       load %.2f across %d logical cores\n", data.LoadOne, data.LogicalCores)
 		case report.NetworkData:
-			fmt.Fprintf(w, "  Network   DNS %s · HTTPS %s · TLS %s\n", healthWord(data.DNSResolved), healthWord(data.HTTPSReachable), healthWord(data.TLSValid))
+			fmt.Fprintf(w, "  Network   DNS resolved=%t · HTTPS reachable=%t · TLS valid=%t\n", data.DNSResolved, data.HTTPSReachable, data.TLSValid)
 		case report.ScanData:
 			fmt.Fprintf(w, "  Apps      %d inspected\n", len(data.Apps))
 		case report.StartupItemsData:
 			fmt.Fprintf(w, "  Startup   %d registered items\n", data.Count)
 		}
 	}
-}
-
-func healthWord(ok bool) string {
-	if ok {
-		return "OK"
-	}
-	return "failed"
 }
 
 func HumanWatch(w io.Writer, timestamp string, severity report.Severity, message string, color bool) {

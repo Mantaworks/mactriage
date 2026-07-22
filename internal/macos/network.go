@@ -27,17 +27,21 @@ func (n NetworkInspector) Inspect(ctx context.Context, target string) (report.Re
 	}
 	data := report.NetworkData{Host: host}
 	dns := n.Runner.Run(ctx, "/usr/bin/dscacheutil", "-q", "host", "-a", "name", host)
+	data.DNSStatus = networkProbeStatus(dns, true)
 	data.DNSResolved = net.ParseIP(host) != nil || (dns.Err == nil && strings.Contains(dns.Stdout, "ip_address:"))
 
 	route := n.Runner.Run(ctx, "/sbin/route", "-n", "get", "default")
+	data.RouteStatus = networkProbeStatus(route, true)
 	data.DefaultRoute = route.Err == nil && strings.Contains(strings.ToLower(route.Stdout), "gateway:")
 
 	proxy := n.Runner.Run(ctx, "/usr/sbin/scutil", "--proxy")
+	data.ProxyStatus = networkProbeStatus(proxy, false)
 	if proxy.Err == nil {
 		data.ProxyConfigured = regexp.MustCompile(`(?m)^\s*(HTTP|HTTPS|SOCKS)Enable\s*:\s*1\s*$`).MatchString(proxy.Stdout)
 	}
 
 	interfaces := n.Runner.Run(ctx, "/sbin/ifconfig", "-l")
+	data.VPNStatus = networkProbeStatus(interfaces, false)
 	if interfaces.Err == nil {
 		for _, name := range strings.Fields(interfaces.Stdout) {
 			if regexp.MustCompile(`^(utun|ppp|ipsec)[0-9]+$`).MatchString(name) {
@@ -60,18 +64,37 @@ func (n NetworkInspector) Inspect(ctx context.Context, target string) (report.Re
 		urlHost = "[" + host + "]"
 	}
 	request := n.Runner.Run(ctx, "/usr/bin/curl", "--silent", "--show-error", "--head", "--output", "/dev/null", "--connect-timeout", "5", "--max-time", "8", "https://"+urlHost+"/")
+	data.HTTPSStatus = networkProbeStatus(request, true)
 	data.HTTPSReachable = request.Err == nil || request.ExitCode == 60
 	data.TLSValid = request.Err == nil
 
 	listeners := n.Runner.Run(ctx, "/usr/sbin/lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-F0pft")
+	data.ListenersStatus = networkProbeStatus(listeners, false)
 	if listeners.Err == nil {
 		data.ListeningSocketCount = ParseLSOF([]byte(listeners.Stdout)).Count
 	}
 
 	r := report.New("network", host)
 	r.Host = (Collector{Runner: n.Runner}).host(ctx)
-	r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidenceNetwork, Status: report.StatusOK, Summary: fmt.Sprintf("Checked DNS, routing, proxy, VPN, HTTPS, TLS, and %d listening sockets", data.ListeningSocketCount), Data: data})
+	status := report.StatusOK
+	for _, probeStatus := range []report.Status{data.DNSStatus, data.RouteStatus, data.ProxyStatus, data.VPNStatus, data.HTTPSStatus, data.ListenersStatus} {
+		if incompleteStatus(probeStatus) {
+			status = report.StatusPartial
+			break
+		}
+	}
+	r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidenceNetwork, Status: status, Summary: fmt.Sprintf("Collected DNS, routing, proxy, VPN, HTTPS, TLS, and listening-socket facts for %s", host), Data: data})
 	return r, nil
+}
+
+func networkProbeStatus(result platform.Result, commandExitIsObservation bool) report.Status {
+	if result.TimedOut {
+		return report.StatusTimedOut
+	}
+	if result.Err != nil && (!commandExitIsObservation || result.ExitCode < 0) {
+		return report.StatusUnavailable
+	}
+	return report.StatusOK
 }
 
 func normalizeNetworkHost(value string) (string, error) {

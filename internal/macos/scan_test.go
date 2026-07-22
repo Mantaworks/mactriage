@@ -85,6 +85,33 @@ func TestQuickCompatibilityScanSkipsDeepSignatureVerification(t *testing.T) {
 	}
 }
 
+func TestQuickCompatibilityScanIsPartialWhenArchitectureUnavailable(t *testing.T) {
+	root := t.TempDir()
+	appPath := filepath.Join(root, "Example.app")
+	if err := os.MkdirAll(filepath.Join(appPath, "Contents", "MacOS"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appPath, "Contents", "MacOS", "App"), []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r, err := (macos.AppScanner{Runner: unavailableArchitectureRunner{}, Quick: true}).Scan(context.Background(), []string{root}, 10, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Evidence[0].Status != report.StatusPartial || r.Evidence[0].Data.(report.ScanData).Apps[0].ArchitectureStatus != report.StatusUnavailable {
+		t.Fatalf("architecture failure was hidden: %#v", r.Evidence[0])
+	}
+}
+
+type unavailableArchitectureRunner struct{ scanRunner }
+
+func (unavailableArchitectureRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	if path == "/usr/bin/lipo" {
+		return platform.Result{ExitCode: -1, Err: errors.New("lipo unavailable")}
+	}
+	return (scanRunner{}).Run(ctx, path, args...)
+}
+
 type quickScanRunner struct {
 	scanRunner
 	codesignCalls int

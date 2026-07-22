@@ -280,11 +280,11 @@ type MemoryData struct {
 
 type CPUData struct {
 	evidenceMarker
-	LogicalCores     int     `json:"logical_cores"`
-	LoadOne          float64 `json:"load_one"`
-	HighestPercent   float64 `json:"highest_percent"`
-	HighestProcess   string  `json:"highest_process,omitempty"`
-	StalledProcesses int     `json:"stalled_processes"`
+	LogicalCores   int            `json:"logical_cores"`
+	LoadOne        float64        `json:"load_one"`
+	HighestPercent float64        `json:"highest_percent"`
+	HighestProcess string         `json:"highest_process,omitempty"`
+	ProcessStates  map[string]int `json:"process_states,omitempty"`
 }
 
 type ServicesData struct {
@@ -312,12 +312,18 @@ type StartupItemsData struct {
 type NetworkData struct {
 	evidenceMarker
 	Host                 string   `json:"host,omitempty"`
+	DNSStatus            Status   `json:"dns_status"`
 	DNSResolved          bool     `json:"dns_resolved"`
+	HTTPSStatus          Status   `json:"https_status"`
 	HTTPSReachable       bool     `json:"https_reachable"`
 	TLSValid             bool     `json:"tls_valid"`
+	RouteStatus          Status   `json:"route_status"`
 	DefaultRoute         bool     `json:"default_route"`
+	ProxyStatus          Status   `json:"proxy_status"`
 	ProxyConfigured      bool     `json:"proxy_configured"`
+	VPNStatus            Status   `json:"vpn_status"`
 	VPNInterfaces        []string `json:"vpn_interfaces,omitempty"`
+	ListenersStatus      Status   `json:"listeners_status"`
 	ListeningSocketCount int      `json:"listening_socket_count"`
 }
 
@@ -355,6 +361,7 @@ type Finding struct {
 	Explanation    string       `json:"explanation"`
 	Confidence     Confidence   `json:"confidence"`
 	EvidenceIDs    []EvidenceID `json:"evidence_ids,omitempty"`
+	Subjects       []string     `json:"subjects,omitempty"`
 	Recommendation string       `json:"recommendation,omitempty"`
 }
 

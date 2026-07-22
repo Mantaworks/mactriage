@@ -88,7 +88,7 @@ func Analyze(r report.Report) report.Report {
 			addFinding(&r, knowledge.CodeScanOSUnsupported, report.Error, "Some applications require a newer macOS", scanExplanation(names, "declare a newer minimum macOS version"), "high", []report.EvidenceID{report.EvidenceScan}, "Update macOS or install compatible application versions.")
 		}
 		if names := affected["intel_only"]; len(names) > 0 {
-			addFinding(&r, knowledge.CodeScanIntelOnly, report.Warning, "Some applications are Intel-only", scanExplanation(names, "require Rosetta on this Apple silicon Mac"), "high", []report.EvidenceID{report.EvidenceScan}, "Check publishers for Apple silicon-native updates.")
+			addFindingWithSubjects(&r, knowledge.CodeScanIntelOnly, report.Warning, "Some applications are Intel-only", scanExplanation(names, "require Rosetta on this Apple silicon Mac"), "high", []report.EvidenceID{report.EvidenceScan}, "Check publishers for Apple silicon-native updates.", names)
 		}
 	}
 	storage, hasStorage := byID[report.EvidenceStorage].Data.(report.StorageData)
@@ -111,8 +111,14 @@ func Analyze(r report.Report) report.Report {
 		}
 		addFinding(&r, knowledge.CodeDoctorCPUPressure, report.Warning, "CPU pressure is elevated", explanation, report.ConfidenceMedium, []report.EvidenceID{report.EvidenceCPU}, "Observe the busiest process and capture a sample if usage persists.")
 	}
-	if hasCPU && cpu.StalledProcesses > 0 {
-		addFinding(&r, knowledge.CodeDoctorProcessStalled, report.Warning, "A process may be stalled or suspended", fmt.Sprintf("%d processes were stopped, suspended, or waiting uninterruptibly.", cpu.StalledProcesses), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceCPU}, "Use mactriage hang on the affected process before relaunching it.")
+	stalledProcesses := 0
+	for state, count := range cpu.ProcessStates {
+		if strings.ContainsAny(state, "DUT") {
+			stalledProcesses += count
+		}
+	}
+	if hasCPU && stalledProcesses > 0 {
+		addFinding(&r, knowledge.CodeDoctorProcessStalled, report.Warning, "A process may be stalled or suspended", fmt.Sprintf("%d processes were stopped, suspended, or waiting uninterruptibly.", stalledProcesses), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceCPU}, "Use mactriage hang on the affected process before relaunching it.")
 	}
 	doctorLimits, hasDoctorLimits := byID[report.EvidenceLimits].Data.(report.LimitsData)
 	if r.Command == "doctor" && hasDoctorLimits && doctorLimits.GlobalMax > 0 && float64(doctorLimits.GlobalUsed) >= float64(doctorLimits.GlobalMax)*0.8 {
@@ -158,30 +164,34 @@ func Analyze(r report.Report) report.Report {
 	if hasRestarts && len(restarts.Processes) > 0 {
 		labels := make([]string, 0, len(restarts.Processes))
 		for _, process := range restarts.Processes {
-			labels = append(labels, fmt.Sprintf("%s (%d)", process.Name, process.Count))
+			if process.Count >= 3 {
+				labels = append(labels, fmt.Sprintf("%s (%d)", process.Name, process.Count))
+			}
 		}
-		addFinding(&r, knowledge.CodeDoctorRestartLoop, report.Warning, "A process is repeatedly restarting", "Repeated exits in the last ten minutes: "+strings.Join(labels, ", ")+".", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceRestartLoops}, "Diagnose or update the named process; do not repeatedly force-restart its parent service.")
+		if len(labels) > 0 {
+			addFinding(&r, knowledge.CodeDoctorRestartLoop, report.Warning, "A process is repeatedly restarting", "Repeated exits in the last ten minutes: "+strings.Join(labels, ", ")+".", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceRestartLoops}, "Diagnose or update the named process; do not repeatedly force-restart its parent service.")
+		}
 	}
 	network, hasNetwork := byID[report.EvidenceNetwork].Data.(report.NetworkData)
 	if hasNetwork {
-		if !network.DefaultRoute {
+		if network.RouteStatus == report.StatusOK && !network.DefaultRoute {
 			addFinding(&r, knowledge.CodeNetworkNoRoute, report.Error, "No default network route was found", "The Mac did not report a default route for internet traffic.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Reconnect Wi-Fi or Ethernet and review VPN configuration.")
 		}
-		if !network.DNSResolved {
+		if network.DNSStatus == report.StatusOK && !network.DNSResolved {
 			addFinding(&r, knowledge.CodeNetworkDNSFailed, report.Error, "DNS lookup failed", fmt.Sprintf("%s did not resolve through the current DNS configuration.", network.Host), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the hostname, VPN, DNS service, and network connection.")
 		}
-		if network.HTTPSReachable && !network.TLSValid {
+		if network.HTTPSStatus == report.StatusOK && network.HTTPSReachable && !network.TLSValid {
 			addFinding(&r, knowledge.CodeNetworkTLSInvalid, report.Error, "TLS certificate validation failed", "The host was reachable, but its certificate could not be validated.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the date, proxy or VPN interception, and the site's certificate; do not bypass validation.")
-		} else if !network.HTTPSReachable {
+		} else if network.HTTPSStatus == report.StatusOK && !network.HTTPSReachable {
 			addFinding(&r, knowledge.CodeNetworkHTTPSFailed, report.Error, "HTTPS connection failed", fmt.Sprintf("Could not establish an HTTPS connection to %s.", network.Host), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check connectivity, proxy, VPN, and firewall policy.")
 		}
-		if network.ProxyConfigured {
+		if network.ProxyStatus == report.StatusOK && network.ProxyConfigured {
 			addFinding(&r, knowledge.CodeNetworkProxyDetected, report.Info, "A network proxy is configured", "A system HTTP, HTTPS, or SOCKS proxy is enabled.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Confirm the proxy is expected and available.")
 		}
-		if len(network.VPNInterfaces) > 0 {
+		if network.VPNStatus == report.StatusOK && len(network.VPNInterfaces) > 0 {
 			addFinding(&r, knowledge.CodeNetworkVPNDetected, report.Info, "A VPN interface is active", fmt.Sprintf("Active tunnel interfaces: %s.", strings.Join(network.VPNInterfaces, ", ")), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Compare with the VPN disconnected only if your policy permits it.")
 		}
-		if network.ListeningSocketCount >= 1000 {
+		if network.ListenersStatus == report.StatusOK && network.ListeningSocketCount >= 1000 {
 			addFinding(&r, knowledge.CodeNetworkListenersHigh, report.Warning, "Many listening sockets are open", fmt.Sprintf("Counted %d listening TCP descriptors.", network.ListeningSocketCount), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceNetwork}, "Use system monitoring to identify the largest socket owners.")
 		}
 	}
@@ -331,6 +341,10 @@ func nearGlobalLimit(status report.Status, limits report.LimitsData) bool {
 }
 
 func addFinding[T ~string](r *report.Report, code string, severity report.Severity, title, explanation string, confidence report.Confidence, evidence []T, recommendation string) {
+	addFindingWithSubjects(r, code, severity, title, explanation, confidence, evidence, recommendation, nil)
+}
+
+func addFindingWithSubjects[T ~string](r *report.Report, code string, severity report.Severity, title, explanation string, confidence report.Confidence, evidence []T, recommendation string, subjects []string) {
 	for _, existing := range r.Findings {
 		if existing.Code == code {
 			return
@@ -340,7 +354,7 @@ func addFinding[T ~string](r *report.Report, code string, severity report.Severi
 	for _, id := range evidence {
 		evidenceIDs = append(evidenceIDs, report.EvidenceID(id))
 	}
-	r.Findings = append(r.Findings, report.Finding{Code: code, Severity: severity, Title: title, Explanation: explanation, Confidence: confidence, EvidenceIDs: evidenceIDs, Recommendation: recommendation})
+	r.Findings = append(r.Findings, report.Finding{Code: code, Severity: severity, Title: title, Explanation: explanation, Confidence: confidence, EvidenceIDs: evidenceIDs, Subjects: append([]string(nil), subjects...), Recommendation: recommendation})
 }
 
 func contains(values []string, target string) bool {

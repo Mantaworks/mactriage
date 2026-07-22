@@ -35,6 +35,30 @@ func TestNetworkInspectorReportsFailedTLSWithoutLeakingCommandOutput(t *testing.
 	}
 }
 
+func TestNetworkInspectorMarksUnavailableProbesPartial(t *testing.T) {
+	r, err := (macos.NetworkInspector{Runner: unavailableNetworkRunner{}}).Inspect(context.Background(), "example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := evidenceData[report.NetworkData](t, r, report.EvidenceNetwork)
+	if r.Evidence[0].Status != report.StatusPartial || data.DNSStatus != report.StatusUnavailable || data.HTTPSStatus != report.StatusTimedOut {
+		t.Fatalf("unavailable probes were reported as complete: %#v", r.Evidence[0])
+	}
+}
+
+type unavailableNetworkRunner struct{}
+
+func (unavailableNetworkRunner) Run(_ context.Context, path string, _ ...string) platform.Result {
+	switch path {
+	case "/usr/bin/dscacheutil", "/sbin/route", "/usr/sbin/scutil", "/sbin/ifconfig", "/usr/sbin/lsof":
+		return platform.Result{ExitCode: -1, Err: errors.New("unavailable")}
+	case "/usr/bin/curl":
+		return platform.Result{ExitCode: -1, Err: errors.New("deadline"), TimedOut: true}
+	default:
+		return platform.Result{}
+	}
+}
+
 type networkRunner struct{ curlError bool }
 
 func (r networkRunner) Run(_ context.Context, path string, _ ...string) platform.Result {

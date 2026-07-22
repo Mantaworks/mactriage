@@ -49,6 +49,7 @@ func TestCompareReportsHealthMetricsAndNewIntelOnlyApps(t *testing.T) {
 		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{SwapUsedBytes: 1 << 30}},
 		{ID: report.EvidenceScan, Status: report.StatusOK, Data: report.ScanData{Apps: []report.ScannedApp{{Name: "Example", Architectures: []string{"arm64"}}}}},
 	}
+	before.Findings = []report.Finding{{Code: "scan.intel_only", Subjects: []string{"Existing"}}}
 	after := report.New("doctor", "this Mac")
 	after.Host.Arch = "arm64"
 	after.Evidence = []report.Evidence{
@@ -56,6 +57,7 @@ func TestCompareReportsHealthMetricsAndNewIntelOnlyApps(t *testing.T) {
 		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{SwapUsedBytes: 3 << 30}},
 		{ID: report.EvidenceScan, Status: report.StatusOK, Data: report.ScanData{Apps: []report.ScannedApp{{Name: "Example", Architectures: []string{"x86_64"}}}}},
 	}
+	after.Findings = []report.Finding{{Code: "scan.intel_only", Subjects: []string{"Existing", "Example"}}}
 
 	comparison := reportutil.Compare(before, after)
 	if len(comparison.MetricChanges) < 2 || len(comparison.NewIntelOnly) != 1 || comparison.NewIntelOnly[0] != "Example" {

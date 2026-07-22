@@ -60,29 +60,54 @@ func TestActionCatalogContainsPermissionAndFollowup(t *testing.T) {
 
 func TestRelaunchAppTerminatesLaunchesAndVerifiesSurvival(t *testing.T) {
 	runner := &sequenceRunner{results: []platform.Result{
-		{Stdout: "10\n11\n"},
-		{},
-		{ExitCode: 1, Err: errors.New("not running")},
 		{},
 		{Stdout: "99\n"},
 		{Stdout: "99\n"},
+		{},
+		{Stdout: "99\n100\n"},
+		{Stdout: "99\n100\n"},
 	}}
 	executor := action.Executor{Runner: runner, PollInterval: time.Millisecond, TerminateTimeout: 10 * time.Millisecond}
-	result, err := executor.RelaunchApp(context.Background(), "/Applications/Example.app", "Example", false, time.Millisecond)
+	result, err := executor.RelaunchApp(context.Background(), "/Applications/Example.app", "Example", []int{10, 11}, false, time.Millisecond)
 	if err != nil {
 		t.Fatalf("RelaunchApp returned error: %v", err)
 	}
-	if len(result.OldPIDs) != 2 || len(result.NewPIDs) != 1 || result.NewPIDs[0] != 99 || !result.Survived || result.Forced {
+	if len(result.OldPIDs) != 2 || len(result.NewPIDs) != 1 || result.NewPIDs[0] != 100 || !result.Survived || result.Forced {
 		t.Fatalf("unexpected relaunch result: %#v", result)
+	}
+	if len(runner.commands) == 0 || runner.commands[0] != "/bin/kill -TERM 10 11" {
+		t.Fatalf("unapproved PID was signaled: %#v", runner.commands)
+	}
+}
+
+func TestForcedRelaunchSignalsOnlyStillRunningApprovedPIDs(t *testing.T) {
+	runner := &sequenceRunner{results: []platform.Result{
+		{Stdout: "11\n99\n"},
+		{},
+		{Stdout: "99\n"},
+		{Stdout: "99\n"},
+		{},
+		{Stdout: "99\n100\n"},
+		{Stdout: "99\n100\n"},
+	}}
+	executor := action.Executor{Runner: runner, PollInterval: time.Millisecond, TerminateTimeout: 10 * time.Millisecond}
+	result, err := executor.RelaunchApp(context.Background(), "/Applications/Example.app", "Example", []int{10, 11}, true, time.Millisecond)
+	if err != nil || !result.Forced || !result.Survived {
+		t.Fatalf("result=%#v error=%v", result, err)
+	}
+	if len(runner.commands) < 2 || runner.commands[1] != "/bin/kill -KILL 11" {
+		t.Fatalf("force signal escaped approved live set: %#v", runner.commands)
 	}
 }
 
 type sequenceRunner struct {
-	results []platform.Result
-	calls   int
+	results  []platform.Result
+	calls    int
+	commands []string
 }
 
-func (r *sequenceRunner) Run(context.Context, string, ...string) platform.Result {
+func (r *sequenceRunner) Run(_ context.Context, path string, args ...string) platform.Result {
+	r.commands = append(r.commands, path+" "+strings.Join(args, " "))
 	if r.calls >= len(r.results) {
 		return platform.Result{ExitCode: 1, Err: errors.New("unexpected call")}
 	}

@@ -46,38 +46,44 @@ func (e Executor) AppPIDs(ctx context.Context, processName string) ([]int, error
 	return e.pidsNamed(ctx, processName)
 }
 
-func (e Executor) RelaunchApp(ctx context.Context, target, processName string, force bool, observe time.Duration) (RelaunchResult, error) {
+func (e Executor) RelaunchApp(ctx context.Context, target, processName string, approvedPIDs []int, force bool, observe time.Duration) (RelaunchResult, error) {
 	if e.Runner == nil {
 		return RelaunchResult{}, errors.New("action executor requires a command runner")
 	}
 	if strings.TrimSpace(target) == "" || strings.TrimSpace(processName) == "" {
 		return RelaunchResult{}, errors.New("relaunch requires an application and process name")
 	}
-	oldPIDs, _ := e.pidsNamed(ctx, processName)
-	result := RelaunchResult{OldPIDs: append([]int(nil), oldPIDs...), Forced: force}
-	if len(oldPIDs) > 0 {
-		if err := e.signal(ctx, "-TERM", oldPIDs); err != nil {
-			return result, fmt.Errorf("request application termination: %w", err)
-		}
-		if !e.waitGone(ctx, processName) {
-			if !force {
-				return result, ErrProcessStillRunning
+	approvedPIDs = validPIDs(approvedPIDs)
+	result := RelaunchResult{OldPIDs: append([]int(nil), approvedPIDs...), Forced: force}
+	if len(approvedPIDs) > 0 {
+		if force {
+			remaining, err := e.pidsNamed(ctx, processName)
+			if err != nil {
+				return result, fmt.Errorf("verify approved application processes: %w", err)
 			}
-			remaining, _ := e.pidsNamed(ctx, processName)
+			remaining = intersectPIDs(remaining, approvedPIDs)
 			if len(remaining) > 0 {
 				if err := e.signal(ctx, "-KILL", remaining); err != nil {
 					return result, fmt.Errorf("force application termination: %w", err)
 				}
-				if !e.waitGone(ctx, processName) {
+				if !e.waitGone(ctx, processName, approvedPIDs) {
 					return result, errors.New("application remained running after SIGKILL")
 				}
 			}
+		} else {
+			if err := e.signal(ctx, "-TERM", approvedPIDs); err != nil {
+				return result, fmt.Errorf("request application termination: %w", err)
+			}
+			if !e.waitGone(ctx, processName, approvedPIDs) {
+				return result, ErrProcessStillRunning
+			}
 		}
 	}
+	preOpenPIDs, _ := e.pidsNamed(ctx, processName)
 	if opened := e.Runner.Run(ctx, "/usr/bin/open", "-a", target); opened.Err != nil {
 		return result, fmt.Errorf("reopen application: %w", opened.Err)
 	}
-	newPIDs, err := e.waitAppear(ctx, processName, 5*time.Second)
+	newPIDs, err := e.waitAppear(ctx, processName, preOpenPIDs, 5*time.Second)
 	if err != nil {
 		return result, err
 	}
@@ -93,7 +99,7 @@ func (e Executor) RelaunchApp(ctx context.Context, target, processName string, f
 	case <-timer.C:
 	}
 	stillRunning, _ := e.pidsNamed(ctx, processName)
-	result.Survived = len(stillRunning) > 0
+	result.Survived = len(intersectPIDs(stillRunning, newPIDs)) > 0
 	if !result.Survived {
 		return result, errors.New("application exited during relaunch verification")
 	}
@@ -111,6 +117,9 @@ func (e Executor) signal(ctx context.Context, signal string, pids []int) error {
 func (e Executor) pidsNamed(ctx context.Context, processName string) ([]int, error) {
 	result := e.Runner.Run(ctx, "/usr/bin/pgrep", "-x", processName)
 	if result.Err != nil || strings.TrimSpace(result.Stdout) == "" {
+		if result.ExitCode == 1 && strings.TrimSpace(result.Stdout) == "" {
+			return nil, nil
+		}
 		return nil, result.Err
 	}
 	var pids []int
@@ -123,48 +132,31 @@ func (e Executor) pidsNamed(ctx context.Context, processName string) ([]int, err
 	return pids, nil
 }
 
-func (e Executor) waitGone(ctx context.Context, processName string) bool {
+func (e Executor) waitGone(ctx context.Context, processName string, approvedPIDs []int) bool {
 	timeout := e.TerminateTimeout
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	interval := e.PollInterval
-	if interval <= 0 {
-		interval = 250 * time.Millisecond
-	}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+	_, err := pollUntil(ctx, e.PollInterval, timeout, func() (struct{}, bool) {
 		pids, _ := e.pidsNamed(ctx, processName)
-		if len(pids) == 0 {
-			return true
-		}
-		select {
-		case <-ctx.Done():
-			return false
-		case <-time.After(interval):
-		}
-	}
-	return false
+		return struct{}{}, len(intersectPIDs(pids, approvedPIDs)) == 0
+	})
+	return err == nil
 }
 
-func (e Executor) waitAppear(ctx context.Context, processName string, timeout time.Duration) ([]int, error) {
-	interval := e.PollInterval
-	if interval <= 0 {
-		interval = 250 * time.Millisecond
-	}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
+func (e Executor) waitAppear(ctx context.Context, processName string, excludedPIDs []int, timeout time.Duration) ([]int, error) {
+	pids, err := pollUntil(ctx, e.PollInterval, timeout, func() ([]int, bool) {
 		pids, _ := e.pidsNamed(ctx, processName)
-		if len(pids) > 0 {
-			return pids, nil
-		}
-		select {
-		case <-ctx.Done():
+		pids = excludePIDs(pids, excludedPIDs)
+		return pids, len(pids) > 0
+	})
+	if err != nil {
+		if ctx.Err() != nil {
 			return nil, ctx.Err()
-		case <-time.After(interval):
 		}
+		return nil, errors.New("restarted application did not appear before the verification deadline")
 	}
-	return nil, errors.New("restarted application did not appear before the verification deadline")
+	return pids, nil
 }
 
 func (e Executor) openSecurity(ctx context.Context) error {
@@ -192,23 +184,13 @@ func (e Executor) launchRosetta(ctx context.Context, target string) error {
 }
 
 func (e Executor) waitForProcess(ctx context.Context, name string, timeout time.Duration) error {
-	interval := e.PollInterval
-	if interval <= 0 {
-		interval = 250 * time.Millisecond
-	}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		result := e.Runner.Run(ctx, "/usr/bin/pgrep", "-x", name)
-		if result.Err == nil && strings.TrimSpace(result.Stdout) != "" {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
+	if _, err := e.waitAppear(ctx, name, nil, timeout); err != nil {
+		if ctx.Err() != nil {
 			return ctx.Err()
-		case <-time.After(interval):
 		}
+		return errors.New("process did not appear before the verification deadline")
 	}
-	return errors.New("process did not appear before the verification deadline")
+	return nil
 }
 
 func (e Executor) RestartSyspolicyd(ctx context.Context) (RestartResult, error) {
@@ -229,23 +211,79 @@ func (e Executor) RestartSyspolicyd(ctx context.Context) (RestartResult, error) 
 	if result := e.Runner.Run(ctx, "/usr/bin/killall", "syspolicyd"); result.Err != nil {
 		return RestartResult{OldPID: oldPID}, fmt.Errorf("terminate syspolicyd: %w", result.Err)
 	}
-	interval := e.PollInterval
+	newPID, waitErr := pollUntil(ctx, e.PollInterval, 10*time.Second, func() (int, bool) {
+		newPID, pidErr := e.pid(ctx)
+		return newPID, pidErr == nil && newPID != 0 && newPID != oldPID
+	})
+	if waitErr == nil {
+		return RestartResult{OldPID: oldPID, NewPID: newPID, Restarted: true}, nil
+	}
+	if ctx.Err() != nil {
+		return RestartResult{OldPID: oldPID}, ctx.Err()
+	}
+	return RestartResult{OldPID: oldPID}, errors.New("launchd did not start a new syspolicyd process within 10 seconds")
+}
+
+func validPIDs(pids []int) []int {
+	seen := map[int]bool{}
+	valid := make([]int, 0, len(pids))
+	for _, pid := range pids {
+		if pid > 0 && !seen[pid] {
+			seen[pid] = true
+			valid = append(valid, pid)
+		}
+	}
+	return valid
+}
+
+func intersectPIDs(current, allowed []int) []int {
+	allowedSet := make(map[int]bool, len(allowed))
+	for _, pid := range allowed {
+		allowedSet[pid] = true
+	}
+	var matching []int
+	for _, pid := range current {
+		if allowedSet[pid] {
+			matching = append(matching, pid)
+		}
+	}
+	return matching
+}
+
+func excludePIDs(current, excluded []int) []int {
+	excludedSet := make(map[int]bool, len(excluded))
+	for _, pid := range excluded {
+		excludedSet[pid] = true
+	}
+	var remaining []int
+	for _, pid := range current {
+		if !excludedSet[pid] {
+			remaining = append(remaining, pid)
+		}
+	}
+	return remaining
+}
+
+func pollUntil[T any](ctx context.Context, interval, timeout time.Duration, probe func() (T, bool)) (T, error) {
 	if interval <= 0 {
 		interval = 250 * time.Millisecond
 	}
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		newPID, pidErr := e.pid(ctx)
-		if pidErr == nil && newPID != 0 && newPID != oldPID {
-			return RestartResult{OldPID: oldPID, NewPID: newPID, Restarted: true}, nil
+		if value, ready := probe(); ready {
+			return value, nil
 		}
+		timer := time.NewTimer(interval)
 		select {
 		case <-ctx.Done():
-			return RestartResult{OldPID: oldPID}, ctx.Err()
-		case <-time.After(interval):
+			timer.Stop()
+			var zero T
+			return zero, ctx.Err()
+		case <-timer.C:
 		}
 	}
-	return RestartResult{OldPID: oldPID}, errors.New("launchd did not start a new syspolicyd process within 10 seconds")
+	var zero T
+	return zero, errors.New("verification deadline exceeded")
 }
 
 func (e Executor) pid(ctx context.Context) (int, error) {

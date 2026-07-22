@@ -245,8 +245,8 @@ func evidenceData(r report.Report) map[report.EvidenceID]report.EvidencePayload 
 }
 
 func newIntelOnlyApps(before, after report.Report) []string {
-	beforeIntel := intelOnlyApps(before)
-	afterIntel := intelOnlyApps(after)
+	beforeIntel := findingSubjects(before.Findings, "scan.intel_only")
+	afterIntel := findingSubjects(after.Findings, "scan.intel_only")
 	var added []string
 	for name := range afterIntel {
 		if !beforeIntel[name] {
@@ -257,20 +257,13 @@ func newIntelOnlyApps(before, after report.Report) []string {
 	return added
 }
 
-func intelOnlyApps(r report.Report) map[string]bool {
+func findingSubjects(findings []report.Finding, code string) map[string]bool {
 	values := map[string]bool{}
-	data, ok := evidenceData(r)[report.EvidenceScan].(report.ScanData)
-	if !ok || r.Host.Arch != "arm64" {
-		return values
-	}
-	for _, app := range data.Apps {
-		hasX86, hasARM := false, false
-		for _, arch := range app.Architectures {
-			hasX86 = hasX86 || arch == "x86_64"
-			hasARM = hasARM || arch == "arm64" || arch == "arm64e"
-		}
-		if hasX86 && !hasARM {
-			values[app.Name] = true
+	for _, finding := range findings {
+		if finding.Code == code {
+			for _, subject := range finding.Subjects {
+				values[subject] = true
+			}
 		}
 	}
 	return values

@@ -50,7 +50,7 @@ func (d Doctor) Inspect(ctx context.Context, opts DoctorOptions) (report.Report,
 	probes := []doctorProbe{
 		{"storage", "Check startup disk space", d.storage},
 		{"memory", "Measure memory and swap pressure", d.memory},
-		{"cpu", "Inspect CPU load and stalled processes", d.cpu},
+		{"cpu", "Inspect CPU load and process states", d.cpu},
 		{"descriptors", "Measure descriptor-table pressure", d.descriptors},
 		{"services", "Verify macOS security services", d.services},
 		{"updates", "Check Software Update availability", d.updates},
@@ -183,7 +183,7 @@ func (d Doctor) cpu(ctx context.Context) report.Evidence {
 	}
 	cores, _ := strconv.Atoi(strings.TrimSpace(coresResult.Stdout))
 	load := parseLoadOne(loadResult.Stdout)
-	data := report.CPUData{LogicalCores: cores, LoadOne: load}
+	data := report.CPUData{LogicalCores: cores, LoadOne: load, ProcessStates: map[string]int{}}
 	for _, line := range nonemptyLines(processResult.Stdout) {
 		fields := strings.Fields(line)
 		if len(fields) < 4 {
@@ -197,9 +197,7 @@ func (d Doctor) cpu(ctx context.Context) report.Evidence {
 			data.HighestPercent = cpu
 			data.HighestProcess = filepath.Base(strings.Join(fields[3:], " "))
 		}
-		if strings.ContainsAny(strings.ToUpper(fields[2]), "DUT") {
-			data.StalledProcesses++
-		}
+		data.ProcessStates[strings.ToUpper(fields[2])]++
 	}
 	return report.Evidence{ID: report.EvidenceCPU, Status: report.StatusOK, Summary: fmt.Sprintf("Load average %.2f across %d logical cores", data.LoadOne, data.LogicalCores), Data: data}
 }
@@ -271,9 +269,7 @@ func (d Doctor) restarts(ctx context.Context) report.Evidence {
 	}
 	var processes []report.ProcessRestartObservation
 	for name, count := range counts {
-		if count >= 3 {
-			processes = append(processes, report.ProcessRestartObservation{Name: name, Count: count})
-		}
+		processes = append(processes, report.ProcessRestartObservation{Name: name, Count: count})
 	}
 	sort.Slice(processes, func(i, j int) bool {
 		if processes[i].Count == processes[j].Count {
@@ -281,7 +277,7 @@ func (d Doctor) restarts(ctx context.Context) report.Evidence {
 		}
 		return processes[i].Count > processes[j].Count
 	})
-	return report.Evidence{ID: report.EvidenceRestartLoops, Status: report.StatusOK, Summary: fmt.Sprintf("Found %d processes restarting repeatedly", len(processes)), Data: report.RestartLoopsData{Processes: processes}}
+	return report.Evidence{ID: report.EvidenceRestartLoops, Status: report.StatusOK, Summary: fmt.Sprintf("Observed exit events for %d named processes", len(processes)), Data: report.RestartLoopsData{Processes: processes}}
 }
 
 func (d Doctor) startup(ctx context.Context) report.Evidence {

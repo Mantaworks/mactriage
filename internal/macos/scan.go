@@ -83,7 +83,7 @@ func (s AppScanner) Scan(ctx context.Context, roots []string, limit, workers int
 	status := report.StatusOK
 	summary := fmt.Sprintf("Inspected %d applications", len(apps))
 	for _, app := range apps {
-		if !s.Quick && (incompleteStatus(app.SignatureStatus) || incompleteStatus(app.ArchitectureStatus)) {
+		if incompleteStatus(app.ArchitectureStatus) || (!s.Quick && incompleteStatus(app.SignatureStatus)) {
 			status = report.StatusPartial
 			break
 		}

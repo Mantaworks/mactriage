@@ -37,7 +37,10 @@ func (a *application) relaunchCommand() *cobra.Command {
 				processName = strings.TrimSuffix(selected.Name, ".app")
 			}
 			executor := action.Executor{Runner: a.runner}
-			pids, _ := executor.AppPIDs(cmd.Context(), processName)
+			pids, err := executor.AppPIDs(cmd.Context(), processName)
+			if err != nil {
+				return fmt.Errorf("inspect running application processes: %w", err)
+			}
 			r := report.New("relaunch", selected.Path)
 			r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidenceRelaunch, Status: report.StatusOK, Summary: fmt.Sprintf("Found %d running application processes", len(pids)), Data: report.RelaunchData{ProcessName: processName, PIDs: pids}})
 			definition, _ := action.Definition(action.RelaunchApp, selected.Path)
@@ -59,7 +62,7 @@ func (a *application) relaunchCommand() *cobra.Command {
 				a.setExit(cmd, 0)
 				return nil
 			}
-			outcome, relaunchErr := executor.RelaunchApp(cmd.Context(), selected.Path, processName, false, observe)
+			outcome, relaunchErr := executor.RelaunchApp(cmd.Context(), selected.Path, processName, pids, false, observe)
 			if errors.Is(relaunchErr, action.ErrProcessStillRunning) {
 				force, confirmErr := present.Confirm("Force the application to quit?", "SIGTERM did not stop the app. SIGKILL can discard unsaved work and prevents normal cleanup. mactriage will reopen and verify the app afterward. Default: No.", a.opts.accessible)
 				if confirmErr != nil {
@@ -70,7 +73,7 @@ func (a *application) relaunchCommand() *cobra.Command {
 					a.setExit(cmd, 0)
 					return nil
 				}
-				outcome, relaunchErr = executor.RelaunchApp(cmd.Context(), selected.Path, processName, true, observe)
+				outcome, relaunchErr = executor.RelaunchApp(cmd.Context(), selected.Path, processName, pids, true, observe)
 			}
 			r.Actions = nil
 			status, summary := report.StatusOK, "Application relaunched and remained running"
