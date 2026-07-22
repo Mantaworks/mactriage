@@ -3,7 +3,7 @@ package report_test
 import (
 	"testing"
 
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 func TestReportExitCodeReflectsUserFacingOutcome(t *testing.T) {

@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/diagnosis"
-	"github.com/upsidedly/mactriage/internal/platform"
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/diagnosis"
+	"github.com/Mantaworks/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 type WatchOptions struct {

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/macos"
-	"github.com/upsidedly/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/macos"
+	"github.com/Mantaworks/mactriage/internal/platform"
 )
 
 func TestIntegrationSystemUtilitiesExist(t *testing.T) {

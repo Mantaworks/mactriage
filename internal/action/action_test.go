@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/action"
-	"github.com/upsidedly/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/action"
+	"github.com/Mantaworks/mactriage/internal/platform"
 )
 
 func TestRestartSyspolicydRequiresRoot(t *testing.T) {

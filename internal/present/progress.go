@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mantaworks/mactriage/internal/report"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/upsidedly/mactriage/internal/report"
 )
 
 type ProgressEvent struct {

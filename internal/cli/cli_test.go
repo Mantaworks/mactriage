@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/upsidedly/mactriage/internal/cli"
-	"github.com/upsidedly/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/cli"
+	"github.com/Mantaworks/mactriage/internal/platform"
 )
 
 func TestHelpExposesApprovedCommandSurface(t *testing.T) {

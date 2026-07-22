@@ -13,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
       MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
       MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
       MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
@@ -27,9 +26,8 @@ jobs:
         with:
           go-version: '1.24.x'
           cache: true
-      - name: Require signing, notarization, and tap credentials
+      - name: Require signing and notarization credentials
         run: |
-          test -n "$TAP_GITHUB_TOKEN"
           test -n "$MACOS_SIGN_P12"
           test -n "$MACOS_SIGN_PASSWORD"
           test -n "$MACOS_NOTARY_KEY"
@@ -39,7 +37,7 @@ jobs:
         uses: anchore/sbom-action/download-syft@v0
       - name: Test release commit
         run: go test -race ./...
-      - name: Sign, notarize, publish, and update tap
+      - name: Sign, notarize, and publish
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser

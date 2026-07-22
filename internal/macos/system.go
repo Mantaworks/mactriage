@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 func (c Collector) System(ctx context.Context, top int, privileged bool) (report.Report, error) {

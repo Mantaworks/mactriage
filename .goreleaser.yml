@@ -65,17 +65,5 @@ changelog:
       - '^docs:'
       - '^test:'
 
-homebrew_casks:
-  - name: mactriage
-    repository:
-      owner: upsidedly
-      name: homebrew-tap
-      token: '{{ .Env.TAP_GITHUB_TOKEN }}'
-    homepage: https://github.com/upsidedly/mactriage
-    description: Diagnose macOS application launch failures
-    license: MIT
-    binaries:
-      - mactriage
-
 release:
   prerelease: auto

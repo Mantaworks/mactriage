@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/upsidedly/mactriage/internal/action"
-	"github.com/upsidedly/mactriage/internal/macos"
-	"github.com/upsidedly/mactriage/internal/present"
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/action"
+	"github.com/Mantaworks/mactriage/internal/macos"
+	"github.com/Mantaworks/mactriage/internal/present"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 func (a *application) offerActions(ctx context.Context, selected macos.App, opts macos.DiagnoseOptions, r report.Report) (*report.Report, error) {

@@ -1,4 +1,10 @@
-# mactriage
+<p align="center">
+  <img src="docs/assets/mactriage.svg" width="132" alt="MacTriage logo">
+</p>
+
+<h1 align="center">MacTriage</h1>
+
+<p align="center">Find out why a macOS app will not launch.</p>
 
 `mactriage` supports macOS 13 Ventura and newer on Apple silicon and Intel Macs.
 
@@ -8,17 +14,23 @@ It is intentionally conservative: it does not disable Gatekeeper or SIP, rewrite
 
 ## Install
 
-Build locally with Go 1.24 or newer:
+Install the latest signed release on Apple silicon or Intel:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantaworks/mactriage/main/install.sh | sh
+```
+
+The installer verifies the release archive against its published SHA-256 checksum and installs to `/usr/local/bin` when writable, otherwise `~/.local/bin`. Set `INSTALL_DIR` or `VERSION` to override either choice:
+
+```sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantaworks/mactriage/main/install.sh | INSTALL_DIR="$HOME/bin" VERSION=v0.1.0 sh
+```
+
+To review the installer before running it, download [install.sh](install.sh) and execute it locally. To build from source, use Go 1.24 or newer:
 
 ```sh
 make build
 ./bin/mactriage version
-```
-
-After the first public release:
-
-```sh
-brew install --cask upsidedly/tap/mactriage
 ```
 
 Release artifacts are built for Apple silicon and Intel Macs, signed with a Developer ID certificate, notarized by Apple, and accompanied by checksums and SBOMs.

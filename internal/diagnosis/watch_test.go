@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/diagnosis"
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/diagnosis"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 func TestClassifyWatchRequiresMeasurementToNameErrnoCondition(t *testing.T) {

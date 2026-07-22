@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/upsidedly/mactriage/internal/present"
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/present"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 func TestJSONContainsStableSchemaAndNoANSI(t *testing.T) {

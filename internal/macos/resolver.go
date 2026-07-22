@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/upsidedly/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/platform"
 )
 
 type App struct {

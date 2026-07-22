@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/platform"
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 type ProgressEvent struct {

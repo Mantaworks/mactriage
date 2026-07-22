@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/platform"
 )
 
 var ErrNeedsElevation = errors.New("this action requires root privileges")

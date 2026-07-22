@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/upsidedly/mactriage/internal/cli"
+	"github.com/Mantaworks/mactriage/internal/cli"
 )
 
 var (

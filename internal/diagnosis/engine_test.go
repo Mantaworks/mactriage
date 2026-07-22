@@ -3,8 +3,8 @@ package diagnosis_test
 import (
 	"testing"
 
-	"github.com/upsidedly/mactriage/internal/diagnosis"
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/diagnosis"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 func TestAnalyzeIdentifiesPerProcessDescriptorExhaustion(t *testing.T) {

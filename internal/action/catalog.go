@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 const (

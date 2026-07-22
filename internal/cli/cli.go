@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mantaworks/mactriage/internal/action"
+	"github.com/Mantaworks/mactriage/internal/diagnosis"
+	"github.com/Mantaworks/mactriage/internal/macos"
+	"github.com/Mantaworks/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/present"
+	"github.com/Mantaworks/mactriage/internal/report"
 	"github.com/spf13/cobra"
-	"github.com/upsidedly/mactriage/internal/action"
-	"github.com/upsidedly/mactriage/internal/diagnosis"
-	"github.com/upsidedly/mactriage/internal/macos"
-	"github.com/upsidedly/mactriage/internal/platform"
-	"github.com/upsidedly/mactriage/internal/present"
-	"github.com/upsidedly/mactriage/internal/report"
 )
 
 type Config struct {

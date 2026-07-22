@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/macos"
-	"github.com/upsidedly/mactriage/internal/platform"
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/macos"
+	"github.com/Mantaworks/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 func TestCollectorUsesTypedPlatformEvidenceWithoutDiagnosing(t *testing.T) {

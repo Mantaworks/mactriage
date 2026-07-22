@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/upsidedly/mactriage/internal/action"
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/action"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 func Analyze(r report.Report) report.Report {

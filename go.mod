@@ -1,4 +1,4 @@
-module github.com/upsidedly/mactriage
+module github.com/Mantaworks/mactriage
 
 go 1.24.2
 

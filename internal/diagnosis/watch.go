@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 type WatchFacts struct {

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/report"
+	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 type DescriptorSample struct {

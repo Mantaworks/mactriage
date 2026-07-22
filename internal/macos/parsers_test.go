@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/upsidedly/mactriage/internal/macos"
+	"github.com/Mantaworks/mactriage/internal/macos"
 )
 
 func TestParseLSOFCountsOnlyNumericDescriptorFields(t *testing.T) {

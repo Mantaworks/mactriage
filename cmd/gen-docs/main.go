@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Mantaworks/mactriage/internal/cli"
 	"github.com/spf13/cobra/doc"
-	"github.com/upsidedly/mactriage/internal/cli"
 )
 
 func main() {

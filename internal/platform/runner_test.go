@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/upsidedly/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/platform"
 )
 
 func TestExecRunnerRequiresAbsoluteExecutable(t *testing.T) {

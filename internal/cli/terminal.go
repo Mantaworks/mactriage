@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/upsidedly/mactriage/internal/present"
+	"github.com/Mantaworks/mactriage/internal/present"
 )
 
 func (a *application) color() bool {
