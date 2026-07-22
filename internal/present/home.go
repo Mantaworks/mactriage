@@ -24,7 +24,8 @@ func GettingStarted(w io.Writer, color bool) {
 	task := func(label, command string) {
 		fmt.Fprintf(w, "  %s %-23s %s\n", decorate("◆", "12", true, color), label, decorate(command, "8", false, color))
 	}
-	task("My Mac feels slow", "mactriage doctor")
+	task("Give my Mac a quick check", "mactriage doctor --quick")
+	task("Storage is getting full", "mactriage storage --details")
 	task("App will not open", "mactriage diagnose <app>")
 	task("App is frozen or slow", "mactriage hang <app|pid>")
 	task("Internet or network trouble", "mactriage network [host]")
@@ -38,6 +39,9 @@ func Home(accessible bool) (HomeChoice, error) {
 	var task string
 	options := []huh.Option[string]{
 		huh.NewOption("My Mac feels slow", "doctor"),
+		huh.NewOption("Storage is getting full", "storage"),
+		huh.NewOption("Review startup and background items", "startup"),
+		huh.NewOption("Battery, heat, or backups", "doctor-health"),
 		huh.NewOption("An app will not open", "diagnose"),
 		huh.NewOption("An app is frozen or slow", "hang"),
 		huh.NewOption("Internet or network trouble", "network"),
@@ -59,7 +63,7 @@ func Home(accessible bool) (HomeChoice, error) {
 	if err := form.Run(); err != nil {
 		return HomeChoice{}, err
 	}
-	if task == "doctor" || task == "system" || task == "scan" {
+	if task == "doctor" || task == "doctor-health" || task == "storage" || task == "startup" || task == "system" || task == "scan" {
 		return HomeChoice{Task: task}, nil
 	}
 	label := "Application name, bundle ID, or .app path"

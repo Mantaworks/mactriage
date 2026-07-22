@@ -1,4 +1,4 @@
-.PHONY: build test verify docs snapshot clean
+.PHONY: build test verify reproducible docs snapshot clean
 
 VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || printf unknown)
@@ -19,6 +19,10 @@ verify:
 	GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath ./cmd/mactriage
 	GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath ./cmd/mactriage
 	rm -f mactriage
+	./scripts/check-reproducible.sh
+
+reproducible:
+	./scripts/check-reproducible.sh
 
 docs:
 	go run ./cmd/gen-docs docs/generated

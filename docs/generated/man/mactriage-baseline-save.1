@@ -25,6 +25,10 @@ Save a private sanitized doctor baseline
 \fB--skip\fP=[]
 	skip selected doctor checks
 
+.PP
+\fB--storage-details\fP[=false]
+	include aggregate standard-folder sizes in this baseline
+
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--accessible\fP[=false]
@@ -39,8 +43,16 @@ Save a private sanitized doctor baseline
 	color mode: auto, always, or never
 
 .PP
+\fB--fail-on\fP="error"
+	return exit 1 at this severity: warning, error, or critical
+
+.PP
 \fB--json\fP[=false]
 	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB--offline\fP[=false]
+	skip checks that require network access
 
 .PP
 \fB-o\fP, \fB--output\fP=""
@@ -51,8 +63,16 @@ Save a private sanitized doctor baseline
 	disable color, animation, and terminal UI control sequences
 
 .PP
+\fB--redact\fP="standard"
+	report redaction: standard or strict
+
+.PP
 \fB--timeout\fP=15s
 	timeout for each macOS evidence command
+
+.PP
+\fB--total-timeout\fP=0s
+	maximum total command duration (0 disables the overall limit)
 
 .PP
 \fB-v\fP, \fB--verbose\fP[=false]

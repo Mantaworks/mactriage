@@ -69,6 +69,9 @@ func WriteBundle(path string, r report.Report) (Manifest, error) {
 func MarkdownSummary(r report.Report) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# mactriage summary\n\n- Command: `%s`\n", sanitize(r.Command))
+	if r.CaseID != "" {
+		fmt.Fprintf(&b, "- Case: `%s`\n", sanitize(r.CaseID))
+	}
 	if r.Target != "" {
 		fmt.Fprintf(&b, "- Target: `%s`\n", sanitize(r.Target))
 	}

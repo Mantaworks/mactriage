@@ -14,6 +14,10 @@ Check DNS, routing, proxy, VPN, HTTPS, and TLS
 
 
 .SH OPTIONS
+\fB--detail\fP[=false]
+	include interface, Wi-Fi, DNS configuration, HTTP, and clock checks
+
+.PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for network
 
@@ -31,8 +35,16 @@ Check DNS, routing, proxy, VPN, HTTPS, and TLS
 	color mode: auto, always, or never
 
 .PP
+\fB--fail-on\fP="error"
+	return exit 1 at this severity: warning, error, or critical
+
+.PP
 \fB--json\fP[=false]
 	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB--offline\fP[=false]
+	skip checks that require network access
 
 .PP
 \fB-o\fP, \fB--output\fP=""
@@ -43,8 +55,16 @@ Check DNS, routing, proxy, VPN, HTTPS, and TLS
 	disable color, animation, and terminal UI control sequences
 
 .PP
+\fB--redact\fP="standard"
+	report redaction: standard or strict
+
+.PP
 \fB--timeout\fP=15s
 	timeout for each macOS evidence command
+
+.PP
+\fB--total-timeout\fP=0s
+	maximum total command duration (0 disables the overall limit)
 
 .PP
 \fB-v\fP, \fB--verbose\fP[=false]

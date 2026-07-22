@@ -42,6 +42,35 @@ func TestDoctorOnlyCollectsSelectedChecks(t *testing.T) {
 	}
 }
 
+func TestDoctorQuickProfileUsesBoundedEverydayChecks(t *testing.T) {
+	r, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Profile: macos.DoctorProfileQuick})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[report.EvidenceID]bool{}
+	for _, evidence := range r.Evidence {
+		seen[evidence.ID] = true
+	}
+	if !seen[report.EvidenceStorage] || !seen[report.EvidenceNetwork] {
+		t.Fatalf("missing quick evidence: %#v", seen)
+	}
+	if seen[report.EvidenceBattery] || seen[report.EvidenceUpdates] {
+		t.Fatalf("quick profile ran full checks: %#v", seen)
+	}
+}
+
+func TestDoctorOfflineSkipsNetworkAndUpdates(t *testing.T) {
+	r, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Profile: macos.DoctorProfileFull, Offline: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, evidence := range r.Evidence {
+		if evidence.ID == report.EvidenceNetwork || evidence.ID == report.EvidenceUpdates {
+			t.Fatalf("offline profile collected %s", evidence.ID)
+		}
+	}
+}
+
 func TestDoctorMarksUnavailableServiceProbesPartial(t *testing.T) {
 	r, err := (macos.Doctor{Runner: unavailableServiceRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Only: []string{"services"}})
 	if err != nil {

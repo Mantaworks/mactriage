@@ -56,7 +56,7 @@ func (a *application) scanCommand() *cobra.Command {
 			if err := a.renderReport(r); err != nil {
 				return err
 			}
-			a.setExit(cmd, r.ExitCode())
+			a.setReportExit(cmd, r)
 			return nil
 		},
 	}

@@ -1,9 +1,11 @@
 package reportutil_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Mantaworks/mactriage/internal/report"
@@ -23,6 +25,26 @@ func TestCompareReportsTracksFindingAndEvidenceChanges(t *testing.T) {
 	}
 	if len(comparison.EvidenceChanges) != 1 || comparison.EvidenceChanges[0].Before != report.StatusFailed || comparison.EvidenceChanges[0].After != report.StatusOK {
 		t.Fatalf("unexpected evidence changes: %#v", comparison.EvidenceChanges)
+	}
+}
+
+func TestStrictRedactionRemovesNamesAndPathsButKeepsCodes(t *testing.T) {
+	r := report.New("diagnose", "Secret App")
+	r.Evidence = []report.Evidence{{ID: report.EvidenceBundle, Status: report.StatusOK, Summary: "Found Secret App", Data: report.BundleData{Path: "/Applications/Secret App.app", Name: "Secret App", BundleID: "com.secret.app"}}}
+	r.Findings = []report.Finding{{Code: "bundle.invalid", Explanation: "Secret App at /Applications/Secret App.app", Subjects: []string{"Secret App"}}}
+	redacted := reportutil.RedactStrict(r)
+	data, _ := json.Marshal(redacted)
+	text := string(data)
+	for _, forbidden := range []string{"Secret App", "/Applications/Secret App.app", "com.secret.app"} {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("strict report leaked %q: %s", forbidden, text)
+		}
+	}
+	if !strings.Contains(text, "bundle.invalid") {
+		t.Fatalf("strict report removed code: %s", text)
+	}
+	if r.Target != "Secret App" || r.Evidence[0].Data.(report.BundleData).Name != "Secret App" {
+		t.Fatal("redaction mutated the input report")
 	}
 }
 
@@ -48,6 +70,7 @@ func TestCompareReportsHealthMetricsAndNewIntelOnlyApps(t *testing.T) {
 		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 40}},
 		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{SwapUsedBytes: 1 << 30}},
 		{ID: report.EvidenceScan, Status: report.StatusOK, Data: report.ScanData{Apps: []report.ScannedApp{{Name: "Example", Architectures: []string{"arm64"}}}}},
+		{ID: report.EvidenceStorageDetail, Status: report.StatusOK, Data: report.StorageDetailsData{Categories: []report.StorageCategory{{Name: "Downloads", Bytes: 10}}}},
 	}
 	before.Findings = []report.Finding{{Code: "scan.intel_only", Subjects: []string{"Existing"}}}
 	after := report.New("doctor", "this Mac")
@@ -56,11 +79,12 @@ func TestCompareReportsHealthMetricsAndNewIntelOnlyApps(t *testing.T) {
 		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 20}},
 		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{SwapUsedBytes: 3 << 30}},
 		{ID: report.EvidenceScan, Status: report.StatusOK, Data: report.ScanData{Apps: []report.ScannedApp{{Name: "Example", Architectures: []string{"x86_64"}}}}},
+		{ID: report.EvidenceStorageDetail, Status: report.StatusOK, Data: report.StorageDetailsData{Categories: []report.StorageCategory{{Name: "Downloads", Bytes: 20}, {Name: "Developer", Bytes: 30}}}},
 	}
 	after.Findings = []report.Finding{{Code: "scan.intel_only", Subjects: []string{"Existing", "Example"}}}
 
 	comparison := reportutil.Compare(before, after)
-	if len(comparison.MetricChanges) < 2 || len(comparison.NewIntelOnly) != 1 || comparison.NewIntelOnly[0] != "Example" {
+	if len(comparison.MetricChanges) < 4 || len(comparison.NewIntelOnly) != 1 || comparison.NewIntelOnly[0] != "Example" {
 		t.Fatalf("comparison=%#v", comparison)
 	}
 }

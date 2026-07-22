@@ -61,7 +61,7 @@ func (a *application) permissionsCommand() *cobra.Command {
 					r = *rechecked
 				}
 			}
-			a.setExit(cmd, r.ExitCode())
+			a.setReportExit(cmd, r)
 			return nil
 		},
 	}

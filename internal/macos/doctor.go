@@ -19,11 +19,21 @@ import (
 	"github.com/Mantaworks/mactriage/internal/report"
 )
 
-var DoctorChecks = []string{"storage", "memory", "cpu", "descriptors", "services", "updates", "crashes", "restarts", "startup", "apps", "network"}
+var DoctorChecks = []string{"storage", "memory", "cpu", "descriptors", "services", "updates", "crashes", "restarts", "startup", "apps", "network", "battery", "thermal", "backup"}
+
+type DoctorProfile string
+
+const (
+	DoctorProfileQuick DoctorProfile = "quick"
+	DoctorProfileFull  DoctorProfile = "full"
+	DoctorProfileFleet DoctorProfile = "fleet"
+)
 
 type DoctorOptions struct {
-	Only []string
-	Skip []string
+	Only    []string
+	Skip    []string
+	Profile DoctorProfile
+	Offline bool
 }
 
 type Doctor struct {
@@ -58,7 +68,16 @@ func (d Doctor) Inspect(ctx context.Context, opts DoctorOptions) (report.Report,
 		{"restarts", "Check repeated process restarts", d.restarts},
 		{"startup", "Count startup agents and daemons", d.startup},
 		{"apps", "Check installed-app compatibility", d.apps},
-		{"network", "Check basic network configuration", d.network},
+		{"network", "Check network configuration", func(ctx context.Context) report.Evidence {
+			networkReport, inspectErr := (NetworkInspector{Runner: d.Runner, Detailed: opts.Profile != DoctorProfileQuick}).Inspect(ctx, "example.com")
+			if inspectErr != nil || len(networkReport.Evidence) == 0 {
+				return unavailable(report.EvidenceNetwork, "Network configuration is unavailable")
+			}
+			return networkReport.Evidence[0]
+		}},
+		{"battery", "Check battery condition", func(ctx context.Context) report.Evidence { return (HealthInspector{Runner: d.Runner}).Battery(ctx) }},
+		{"thermal", "Check thermal limits", func(ctx context.Context) report.Evidence { return (HealthInspector{Runner: d.Runner}).Thermal(ctx) }},
+		{"backup", "Check Time Machine freshness", func(ctx context.Context) report.Evidence { return (HealthInspector{Runner: d.Runner}).Backup(ctx) }},
 	}
 	results := make([]report.Evidence, len(probes))
 	var wg sync.WaitGroup
@@ -90,9 +109,27 @@ func (d Doctor) Inspect(ctx context.Context, opts DoctorOptions) (report.Report,
 func selectDoctorChecks(opts DoctorOptions) (map[string]bool, error) {
 	known := make(map[string]bool, len(DoctorChecks))
 	selected := make(map[string]bool, len(DoctorChecks))
+	profile := opts.Profile
+	if profile == "" {
+		profile = DoctorProfileFull
+	}
+	if profile != DoctorProfileQuick && profile != DoctorProfileFull && profile != DoctorProfileFleet {
+		return nil, fmt.Errorf("unknown doctor profile %q", profile)
+	}
+	quick := map[string]bool{"storage": true, "memory": true, "cpu": true, "descriptors": true, "services": true, "network": true}
+	fleetSkip := map[string]bool{"updates": true}
 	for _, check := range DoctorChecks {
 		known[check] = true
-		selected[check] = len(opts.Only) == 0
+		switch {
+		case len(opts.Only) != 0:
+			selected[check] = false
+		case profile == DoctorProfileQuick:
+			selected[check] = quick[check]
+		case profile == DoctorProfileFleet:
+			selected[check] = !fleetSkip[check]
+		default:
+			selected[check] = true
+		}
 	}
 	for _, check := range opts.Only {
 		if !known[check] {
@@ -105,6 +142,10 @@ func selectDoctorChecks(opts DoctorOptions) (map[string]bool, error) {
 			return nil, fmt.Errorf("unknown doctor check %q", check)
 		}
 		selected[check] = false
+	}
+	if opts.Offline {
+		selected["network"] = false
+		selected["updates"] = false
 	}
 	return selected, nil
 }
@@ -298,10 +339,12 @@ func (d Doctor) startup(ctx context.Context) report.Evidence {
 	}
 	if background.Err == nil {
 		count := len(regexp.MustCompile(`(?im)^\s*UUID\s*:`).FindAllString(background.Stdout, -1))
-		return report.Evidence{ID: report.EvidenceStartupItems, Status: report.StatusOK, Summary: fmt.Sprintf("Counted %d registered login and background items", count), Data: report.StartupItemsData{Count: count, Source: "background-task-management"}}
+		items := parseStartupItems(background.Stdout)
+		return report.Evidence{ID: report.EvidenceStartupItems, Status: report.StatusOK, Summary: fmt.Sprintf("Counted %d registered login and background items", count), Data: report.StartupItemsData{Count: count, Source: "background-task-management", Items: items}}
 	}
 	dirs := []string{filepath.Join(os.Getenv("HOME"), "Library", "LaunchAgents"), "/Library/LaunchAgents", "/Library/LaunchDaemons"}
 	count := 0
+	var items []report.StartupItem
 	available := false
 	for _, dir := range dirs {
 		result := d.Runner.Run(ctx, "/bin/ls", "-1", dir)
@@ -312,13 +355,51 @@ func (d Doctor) startup(ctx context.Context) report.Evidence {
 		for _, line := range nonemptyLines(result.Stdout) {
 			if strings.HasSuffix(strings.ToLower(line), ".plist") {
 				count++
+				if len(items) < 100 {
+					items = append(items, report.StartupItem{Identifier: strings.TrimSuffix(line, filepath.Ext(line))})
+				}
 			}
 		}
 	}
 	if !available {
 		return unavailable(report.EvidenceStartupItems, "Startup agent count is unavailable")
 	}
-	return report.Evidence{ID: report.EvidenceStartupItems, Status: report.StatusPartial, Summary: fmt.Sprintf("Counted %d launch agents and daemons; registered Login Items were unavailable", count), Data: report.StartupItemsData{Count: count, Source: "launch-agent-fallback"}}
+	return report.Evidence{ID: report.EvidenceStartupItems, Status: report.StatusPartial, Summary: fmt.Sprintf("Counted %d launch agents and daemons; registered Login Items were unavailable", count), Data: report.StartupItemsData{Count: count, Source: "launch-agent-fallback", Items: items}}
+}
+
+func parseStartupItems(output string) []report.StartupItem {
+	var items []report.StartupItem
+	var current report.StartupItem
+	flush := func() {
+		if current.Name != "" || current.Identifier != "" {
+			items = append(items, current)
+			current = report.StartupItem{}
+		}
+	}
+	for _, line := range nonemptyLines(output) {
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key, value := strings.ToLower(strings.TrimSpace(parts[0])), strings.TrimSpace(parts[1])
+		switch key {
+		case "name":
+			flush()
+			current.Name = value
+		case "identifier", "bundle identifier":
+			current.Identifier = value
+		case "team identifier":
+			current.TeamID = value
+		}
+		if len(items) >= 100 {
+			break
+		}
+	}
+	flush()
+	if len(items) > 100 {
+		items = items[:100]
+	}
+	return items
 }
 
 func (d Doctor) apps(ctx context.Context) report.Evidence {

@@ -37,6 +37,7 @@ func (a *application) collectCommand() *cobra.Command {
 				return err
 			}
 			r.Command = "collect"
+			r = a.redactReport(r)
 			path := a.opts.output
 			if path == "" {
 				name := selected.Name
@@ -57,7 +58,7 @@ func (a *application) collectCommand() *cobra.Command {
 			if !a.opts.json {
 				fmt.Fprintf(a.config.Err, "\nSupport bundle written privately to %s\n", path)
 			}
-			a.setExit(cmd, r.ExitCode())
+			a.setReportExit(cmd, r)
 			return nil
 		},
 	}

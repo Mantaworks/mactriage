@@ -2,6 +2,15 @@
 
 All notable user-facing changes to mactriage are documented here.
 
+## v0.4.0 — The Follow-Through Release
+
+- Added Quick, Full, and Fleet Doctor profiles with explicit verdicts, case IDs, top-three next steps, and unknown-check labels.
+- Added battery condition, thermal-limit, Time Machine freshness, aggregate storage-detail, sanitized startup-item, and deeper network evidence.
+- Added permission-gated, verified shortcuts to the relevant macOS Settings panes and Activity Monitor; mactriage still changes no setting itself.
+- Added `schema`, `--fail-on`, `--total-timeout`, `--offline`, and `--redact strict` for help-desk and fleet automation.
+- Expanded baseline health metrics and preserved schema-1 compatibility, private atomic output, and non-mutating JSON behavior.
+- Added reproducibility checks, pinned CI actions, CodeQL, OpenSSF Scorecard, Dependabot, release attestations, MDM examples, and community templates.
+
 ## v0.3.0 — The Doctor Command
 
 - Added `doctor`, a fast concurrent whole-Mac health check with severity and check filters plus an optional permission-gated action flow.

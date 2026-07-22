@@ -26,12 +26,20 @@ mactriage collects bounded macOS application and resource evidence, explains the
 	color mode: auto, always, or never
 
 .PP
+\fB--fail-on\fP="error"
+	return exit 1 at this severity: warning, error, or critical
+
+.PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for mactriage
 
 .PP
 \fB--json\fP[=false]
 	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB--offline\fP[=false]
+	skip checks that require network access
 
 .PP
 \fB-o\fP, \fB--output\fP=""
@@ -42,8 +50,16 @@ mactriage collects bounded macOS application and resource evidence, explains the
 	disable color, animation, and terminal UI control sequences
 
 .PP
+\fB--redact\fP="standard"
+	report redaction: standard or strict
+
+.PP
 \fB--timeout\fP=15s
 	timeout for each macOS evidence command
+
+.PP
+\fB--total-timeout\fP=0s
+	maximum total command duration (0 disables the overall limit)
 
 .PP
 \fB-v\fP, \fB--verbose\fP[=false]
@@ -51,4 +67,4 @@ mactriage collects bounded macOS application and resource evidence, explains the
 
 
 .SH SEE ALSO
-\fBmactriage-baseline(1)\fP, \fBmactriage-collect(1)\fP, \fBmactriage-compare(1)\fP, \fBmactriage-completion(1)\fP, \fBmactriage-diagnose(1)\fP, \fBmactriage-doctor(1)\fP, \fBmactriage-explain(1)\fP, \fBmactriage-hang(1)\fP, \fBmactriage-network(1)\fP, \fBmactriage-permissions(1)\fP, \fBmactriage-relaunch(1)\fP, \fBmactriage-repair(1)\fP, \fBmactriage-scan(1)\fP, \fBmactriage-share(1)\fP, \fBmactriage-summarize(1)\fP, \fBmactriage-system(1)\fP, \fBmactriage-version(1)\fP, \fBmactriage-watch(1)\fP
+\fBmactriage-baseline(1)\fP, \fBmactriage-collect(1)\fP, \fBmactriage-compare(1)\fP, \fBmactriage-completion(1)\fP, \fBmactriage-diagnose(1)\fP, \fBmactriage-doctor(1)\fP, \fBmactriage-explain(1)\fP, \fBmactriage-hang(1)\fP, \fBmactriage-network(1)\fP, \fBmactriage-permissions(1)\fP, \fBmactriage-relaunch(1)\fP, \fBmactriage-repair(1)\fP, \fBmactriage-scan(1)\fP, \fBmactriage-schema(1)\fP, \fBmactriage-share(1)\fP, \fBmactriage-startup(1)\fP, \fBmactriage-storage(1)\fP, \fBmactriage-summarize(1)\fP, \fBmactriage-system(1)\fP, \fBmactriage-version(1)\fP, \fBmactriage-watch(1)\fP

@@ -40,9 +40,12 @@ func Human(w io.Writer, r report.Report, style Style) {
 		title += " · " + r.Target
 	}
 	fmt.Fprintln(w, decorate(title, "12", true, style.Color))
+	fmt.Fprintf(w, "%s  Case %s\n", decorate(verdict(r), verdictColor(r), true, style.Color), r.CaseID)
 	fmt.Fprintf(w, "Command: %s   Evidence: %d   Completeness: %s\n", r.Command, len(r.Evidence), strings.ToUpper(string(r.Completeness)))
 	if r.Command == "doctor" {
 		doctorSnapshot(w, r)
+	} else if r.Command == "storage" || r.Command == "startup" {
+		healthDetails(w, r)
 	}
 
 	if len(r.Findings) == 0 {
@@ -72,6 +75,90 @@ func Human(w io.Writer, r report.Report, style Style) {
 			fmt.Fprintf(w, "  → %s%s\n    %s\n", action.Title, root, wrap(action.Description, width-4))
 		}
 	}
+	steps := nextSteps(r.Findings, 3)
+	if len(steps) > 0 {
+		fmt.Fprintln(w, "\nNext best steps")
+		for i, step := range steps {
+			fmt.Fprintf(w, "  %d. %s\n", i+1, wrap(step, width-5))
+		}
+	}
+	var unknown []string
+	for _, evidence := range r.Evidence {
+		if evidence.Status == report.StatusUnavailable || evidence.Status == report.StatusTimedOut || evidence.Status == report.StatusPartial {
+			unknown = append(unknown, string(evidence.ID))
+		}
+	}
+	if len(unknown) > 0 {
+		fmt.Fprintln(w, "\nUnknown checks\n  "+strings.Join(unknown, ", "))
+	}
+}
+
+func healthDetails(w io.Writer, r report.Report) {
+	for _, evidence := range r.Evidence {
+		switch data := evidence.Data.(type) {
+		case report.StorageData:
+			fmt.Fprintf(w, "\nStartup disk\n  %.1f%% available · %d GiB free of %d GiB\n", data.AvailablePercent, data.AvailableBytes>>30, data.TotalBytes>>30)
+		case report.StorageDetailsData:
+			fmt.Fprintln(w, "\nAggregate categories")
+			for _, category := range data.Categories {
+				fmt.Fprintf(w, "  %-14s %6.1f GiB\n", category.Name, float64(category.Bytes)/(1<<30))
+			}
+		case report.StartupItemsData:
+			fmt.Fprintf(w, "\nStartup items (%d, source: %s)\n", data.Count, data.Source)
+			for _, item := range data.Items {
+				label := item.Name
+				if label == "" {
+					label = item.Identifier
+				}
+				if label != "" {
+					fmt.Fprintln(w, "  "+label)
+				}
+			}
+		}
+	}
+}
+
+func verdict(r report.Report) string {
+	for _, f := range r.Findings {
+		if f.Severity == report.Critical || f.Severity == report.Error {
+			return "NEEDS ATTENTION"
+		}
+	}
+	for _, f := range r.Findings {
+		if f.Severity == report.Warning {
+			return "CHECK RECOMMENDED"
+		}
+	}
+	if r.Completeness == report.Partial {
+		return "INCOMPLETE"
+	}
+	return "LOOKS GOOD"
+}
+
+func verdictColor(r report.Report) string {
+	switch verdict(r) {
+	case "NEEDS ATTENTION":
+		return "9"
+	case "CHECK RECOMMENDED", "INCOMPLETE":
+		return "11"
+	default:
+		return "10"
+	}
+}
+
+func nextSteps(findings []report.Finding, limit int) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, finding := range sortedFindings(findings) {
+		if finding.Recommendation != "" && !seen[finding.Recommendation] {
+			seen[finding.Recommendation] = true
+			out = append(out, finding.Recommendation)
+		}
+		if len(out) == limit {
+			break
+		}
+	}
+	return out
 }
 
 func doctorSnapshot(w io.Writer, r report.Report) {
@@ -92,10 +179,33 @@ func doctorSnapshot(w io.Writer, r report.Report) {
 				networkFact(data.DNSStatus, data.DNSResolved, "resolved", "not resolved"),
 				networkFact(data.HTTPSStatus, data.HTTPSReachable, "reachable", "not reachable"),
 				networkFact(data.HTTPSStatus, data.TLSValid, "valid", "not valid"))
+			if data.InterfaceStatus != "" || data.DNSConfigStatus != "" {
+				dnsServers := "unknown"
+				if data.DNSConfigStatus == report.StatusOK {
+					dnsServers = fmt.Sprintf("%d", data.DNSServerCount)
+				}
+				fmt.Fprintf(w, "            interface %s · Wi-Fi %s · DNS servers %s · clock year %d\n",
+					networkFact(data.InterfaceStatus, data.ActiveInterface && !data.SelfAssigned, "active", "unavailable"),
+					networkFact(data.WiFiStatus, data.WiFiPowered && data.WiFiAssociated, "connected", "not connected"), dnsServers, data.ClockYear)
+			}
 		case report.ScanData:
 			fmt.Fprintf(w, "  Apps      %d inspected\n", len(data.Apps))
 		case report.StartupItemsData:
 			fmt.Fprintf(w, "  Startup   %d registered items\n", data.Count)
+		case report.BatteryData:
+			if data.Present {
+				fmt.Fprintf(w, "  Battery   %d%% charge · %.1f%% estimated health · %d cycles\n", data.Percent, data.HealthPercent, data.CycleCount)
+			}
+		case report.ThermalData:
+			fmt.Fprintf(w, "  Thermal   CPU limit %d%% · warning recorded %t\n", data.CPUSpeedLimit, data.WarningRecorded)
+		case report.BackupData:
+			if !data.Configured {
+				fmt.Fprintf(w, "  Backup    Time Machine is not configured\n")
+			} else if data.HasBackup {
+				fmt.Fprintf(w, "  Backup    latest backup %.1f hours ago\n", data.LatestAgeHours)
+			} else {
+				fmt.Fprintf(w, "  Backup    configured · latest backup was unavailable\n")
+			}
 		}
 	}
 }

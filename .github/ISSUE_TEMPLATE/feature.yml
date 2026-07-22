@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest an in-scope diagnostic or usability improvement
+title: "feature: "
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the user or help-desk task, not only a proposed command.
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Ideal workflow
+    validations:
+      required: true
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Primary audience
+      options: [Everyday Mac user, Developer, Help desk, Managed fleet]
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Scope check
+      options:
+        - label: This does not require telemetry, a daemon, security bypass, automatic cleanup, or silent system changes.
+          required: true

@@ -98,10 +98,12 @@ func Analyze(r report.Report) report.Report {
 			severity = report.Error
 		}
 		addFinding(&r, knowledge.CodeDoctorStorageLow, severity, "Startup disk space is low", fmt.Sprintf("Only %.1f%% of the startup disk is available.", storage.AvailablePercent), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceStorage}, "Free space by moving or removing files you recognize, then rerun doctor.")
+		addAction(&r, action.OpenStorage)
 	}
 	memory, hasMemory := byID[report.EvidenceMemory].Data.(report.MemoryData)
 	if hasMemory && ((memory.FreePercent > 0 && memory.FreePercent <= 10) || (memory.FreePercent == 0 && memory.SwapUsedBytes >= 4<<30)) {
 		addFinding(&r, knowledge.CodeDoctorMemoryPressure, report.Warning, "Memory pressure is elevated", fmt.Sprintf("Readily available memory is %.1f%% and swap usage is %d MiB.", memory.FreePercent, memory.SwapUsedBytes>>20), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceMemory}, "Close memory-heavy applications and check whether pressure falls.")
+		addAction(&r, action.OpenActivityMonitor)
 	}
 	cpu, hasCPU := byID[report.EvidenceCPU].Data.(report.CPUData)
 	if hasCPU && ((cpu.LogicalCores > 0 && cpu.LoadOne >= float64(cpu.LogicalCores)*1.5) || cpu.HighestPercent >= 90) {
@@ -110,6 +112,7 @@ func Analyze(r report.Report) report.Report {
 			explanation += fmt.Sprintf(" %s is currently using %.1f%% CPU.", cpu.HighestProcess, cpu.HighestPercent)
 		}
 		addFinding(&r, knowledge.CodeDoctorCPUPressure, report.Warning, "CPU pressure is elevated", explanation, report.ConfidenceMedium, []report.EvidenceID{report.EvidenceCPU}, "Observe the busiest process and capture a sample if usage persists.")
+		addAction(&r, action.OpenActivityMonitor)
 	}
 	stalledProcesses := 0
 	for state, count := range cpu.ProcessStates {
@@ -159,6 +162,7 @@ func Analyze(r report.Report) report.Report {
 			label = "registered login and background items"
 		}
 		addFinding(&r, knowledge.CodeDoctorStartupItemsHigh, report.Warning, "Many startup items are installed", fmt.Sprintf("Found %d %s.", startup.Count, label), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceStartupItems}, "Review Login Items in System Settings; mactriage will not remove them.")
+		addAction(&r, action.OpenLoginItems)
 	}
 	restarts, hasRestarts := byID[report.EvidenceRestartLoops].Data.(report.RestartLoopsData)
 	if hasRestarts && len(restarts.Processes) > 0 {
@@ -174,16 +178,43 @@ func Analyze(r report.Report) report.Report {
 	}
 	network, hasNetwork := byID[report.EvidenceNetwork].Data.(report.NetworkData)
 	if hasNetwork {
+		if network.SelfAssigned {
+			addFinding(&r, knowledge.CodeNetworkSelfAssigned, report.Error, "The active interface has a self-assigned address", "macOS reported a 169.254 address instead of an address supplied by the network.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Reconnect to Wi-Fi or Ethernet and review the router's DHCP service.")
+			addAction(&r, action.OpenNetwork)
+		}
 		if network.RouteStatus == report.StatusOK && !network.DefaultRoute {
-			addFinding(&r, knowledge.CodeNetworkNoRoute, report.Error, "No default network route was found", "The Mac did not report a default route for internet traffic.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Reconnect Wi-Fi or Ethernet and review VPN configuration.")
+			recommendation := "Reconnect Wi-Fi or Ethernet and review VPN configuration."
+			if network.WiFiStatus == report.StatusOK && !network.WiFiPowered {
+				recommendation = "Turn on Wi-Fi in Network settings, or connect Ethernet."
+			}
+			if network.WiFiStatus == report.StatusOK && network.WiFiPowered && !network.WiFiAssociated {
+				recommendation = "Join the expected Wi-Fi network or connect Ethernet."
+			}
+			addFinding(&r, knowledge.CodeNetworkNoRoute, report.Error, "No default network route was found", "The Mac did not report a default route for internet traffic.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, recommendation)
+			addAction(&r, action.OpenNetwork)
 		}
 		if network.DNSStatus == report.StatusOK && !network.DNSResolved {
-			addFinding(&r, knowledge.CodeNetworkDNSFailed, report.Error, "DNS lookup failed", fmt.Sprintf("%s did not resolve through the current DNS configuration.", network.Host), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the hostname, VPN, DNS service, and network connection.")
+			explanation := fmt.Sprintf("%s did not resolve through the current DNS configuration.", network.Host)
+			if network.DNSConfigStatus == report.StatusOK && network.DNSServerCount == 0 {
+				explanation += " No DNS servers were present in the active resolver configuration."
+			}
+			addFinding(&r, knowledge.CodeNetworkDNSFailed, report.Error, "DNS lookup failed", explanation, report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the hostname, VPN, DNS service, and network connection.")
+			addAction(&r, action.OpenNetwork)
 		}
 		if network.HTTPSStatus == report.StatusOK && network.HTTPSReachable && !network.TLSValid {
-			addFinding(&r, knowledge.CodeNetworkTLSInvalid, report.Error, "TLS certificate validation failed", "The host was reachable, but its certificate could not be validated.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the date, proxy or VPN interception, and the site's certificate; do not bypass validation.")
-		} else if network.HTTPSStatus == report.StatusOK && !network.HTTPSReachable {
+			recommendation := "Check the date, proxy or VPN interception, and the site's certificate; do not bypass validation."
+			if network.ClockYear > 0 && network.ClockYear < 2024 {
+				recommendation = "Correct the Mac's date and time in System Settings, then retry; do not bypass certificate validation."
+			}
+			addFinding(&r, knowledge.CodeNetworkTLSInvalid, report.Error, "TLS certificate validation failed", "The host was reachable, but its certificate could not be validated.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, recommendation)
+			addAction(&r, action.OpenNetwork)
+		} else if network.HTTPSStatus == report.StatusOK && !network.HTTPSReachable && !(network.HTTPStatus == report.StatusOK && network.HTTPReachable) {
 			addFinding(&r, knowledge.CodeNetworkHTTPSFailed, report.Error, "HTTPS connection failed", fmt.Sprintf("Could not establish an HTTPS connection to %s.", network.Host), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check connectivity, proxy, VPN, and firewall policy.")
+			addAction(&r, action.OpenNetwork)
+		}
+		if network.HTTPStatus == report.StatusOK && network.HTTPReachable && !network.HTTPSReachable {
+			addFinding(&r, knowledge.CodeNetworkCaptivePortal, report.Warning, "A network sign-in page may be blocking HTTPS", "Plain HTTP was reachable while the HTTPS check failed.", report.ConfidenceMedium, []report.EvidenceID{report.EvidenceNetwork}, "Open a browser and complete the network sign-in if this is a guest or public network.")
+			addAction(&r, action.OpenNetwork)
 		}
 		if network.ProxyStatus == report.StatusOK && network.ProxyConfigured {
 			addFinding(&r, knowledge.CodeNetworkProxyDetected, report.Info, "A network proxy is configured", "A system HTTP, HTTPS, or SOCKS proxy is enabled.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Confirm the proxy is expected and available.")
@@ -194,6 +225,21 @@ func Analyze(r report.Report) report.Report {
 		if network.ListenersStatus == report.StatusOK && network.ListeningSocketCount >= 1000 {
 			addFinding(&r, knowledge.CodeNetworkListenersHigh, report.Warning, "Many listening sockets are open", fmt.Sprintf("Counted %d listening TCP descriptors.", network.ListeningSocketCount), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceNetwork}, "Use system monitoring to identify the largest socket owners.")
 		}
+	}
+	battery, hasBattery := byID[report.EvidenceBattery].Data.(report.BatteryData)
+	if hasBattery && battery.Present && ((battery.HealthPercent > 0 && battery.HealthPercent < 80) || (battery.Condition != "" && !strings.EqualFold(battery.Condition, "good") && !strings.EqualFold(battery.Condition, "normal"))) {
+		addFinding(&r, knowledge.CodeDoctorBatteryHealth, report.Warning, "Battery health may need attention", fmt.Sprintf("Estimated capacity is %.1f%% and the reported condition is %q.", battery.HealthPercent, battery.Condition), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceBattery}, "Review Battery settings and Apple service guidance.")
+		addAction(&r, action.OpenBattery)
+	}
+	thermal, hasThermal := byID[report.EvidenceThermal].Data.(report.ThermalData)
+	if hasThermal && (thermal.WarningRecorded || (thermal.CPUSpeedLimit > 0 && thermal.CPUSpeedLimit < 100) || (thermal.SchedulerLimit > 0 && thermal.SchedulerLimit < 100)) {
+		addFinding(&r, knowledge.CodeDoctorThermalPressure, report.Warning, "Thermal limits are active", "macOS reported a thermal warning or reduced CPU scheduling limits.", report.ConfidenceMedium, []report.EvidenceID{report.EvidenceThermal}, "Improve airflow and recheck after the Mac cools.")
+		addAction(&r, action.OpenActivityMonitor)
+	}
+	backup, hasBackup := byID[report.EvidenceBackup].Data.(report.BackupData)
+	if hasBackup && backup.Configured && (!backup.HasBackup || backup.LatestAgeHours > 168) {
+		addFinding(&r, knowledge.CodeDoctorBackupStale, report.Warning, "Time Machine has no recent backup", fmt.Sprintf("The latest observed backup is %.1f hours old.", backup.LatestAgeHours), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceBackup}, "Open Time Machine settings and review the latest backup attempt.")
+		addAction(&r, action.OpenTimeMachine)
 	}
 	if relaunch := byID[report.EvidenceRelaunch]; relaunch.ID != "" && relaunch.Status == report.StatusFailed {
 		addFinding(&r, knowledge.CodeRelaunchFailed, report.Error, "Application relaunch failed", relaunch.Error, report.ConfidenceHigh, []report.EvidenceID{report.EvidenceRelaunch}, "Review the reported step and diagnose the app before trying again.")
@@ -310,6 +356,19 @@ func Analyze(r report.Report) report.Report {
 		addRetryAction(&r)
 	}
 
+	sort.SliceStable(r.Actions, func(i, j int) bool {
+		priority := func(id report.ActionID) int {
+			switch id {
+			case action.RepairSyspolicyd:
+				return 0
+			case action.OpenSoftwareUpdate:
+				return 1
+			default:
+				return 2
+			}
+		}
+		return priority(r.Actions[i].ID) < priority(r.Actions[j].ID)
+	})
 	return r
 }
 

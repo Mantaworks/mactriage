@@ -6,9 +6,15 @@
 
 <p align="center">Understand what is wrong with your Mac—and what to do next.</p>
 
+<p align="center">
+  <a href="https://github.com/Mantaworks/mactriage/actions/workflows/ci.yml"><img src="https://github.com/Mantaworks/mactriage/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/Mantaworks/mactriage"><img src="https://api.scorecard.dev/projects/github.com/Mantaworks/mactriage/badge" alt="OpenSSF Scorecard"></a>
+  <a href="https://github.com/Mantaworks/mactriage/releases"><img src="https://img.shields.io/github/v/release/Mantaworks/mactriage" alt="Latest release"></a>
+</p>
+
 `mactriage` supports macOS 13 Ventura and newer on Apple silicon and Intel Macs.
 
-`mactriage` is a guided macOS troubleshooter. **v0.3.0 — The Doctor Command** adds whole-Mac health checks, network diagnosis, verified app relaunches, private health baselines, and shareable support reports to its existing launch, permission, compatibility, and resource diagnostics. Results are ranked and written in plain language.
+`mactriage` is a guided, privacy-first macOS troubleshooter for slow Macs, broken apps, network and permission problems, crashes, and safe recovery. **v0.4.0 — The Follow-Through Release** adds fast/full/fleet Doctor profiles, battery/thermal/backup health, storage and startup workflows, deeper network diagnosis, strict redaction, stable schemas, and permission-gated shortcuts to the right macOS surface.
 
 It is intentionally conservative: it does not disable Gatekeeper or SIP, rewrite signatures, reset security databases, recursively remove quarantine attributes, or delete application data.
 
@@ -31,7 +37,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantawor
 The installer verifies the release archive against its published SHA-256 checksum and installs to `/usr/local/bin` when writable, otherwise `~/.local/bin`. Set `INSTALL_DIR` or `VERSION` to override either choice:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantaworks/mactriage/main/install.sh | INSTALL_DIR="$HOME/bin" VERSION=v0.3.0 sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantaworks/mactriage/main/install.sh | INSTALL_DIR="$HOME/bin" VERSION=v0.4.0 sh
 ```
 
 To review the installer before running it, download [install.sh](install.sh) and execute it locally. To build from source, use Go 1.25.8 or newer:
@@ -43,7 +49,7 @@ make build
 
 Prebuilt release archives are available for Apple silicon and Intel Macs with checksums and SBOMs. They are not Apple-notarized; Homebrew is the recommended installation path because its formula builds locally from tagged source.
 
-## Start here
+## 30-second start
 
 Run `mactriage` with no arguments:
 
@@ -53,21 +59,46 @@ mactriage
 
 In a terminal it opens a colorful guided menu that asks what is wrong, requests only the target it needs, and runs the appropriate diagnostic. Terminal history remains intact. Scripts and experienced users can continue to use the regular subcommands and flags documented below.
 
+For the fastest read-only health check:
+
+```sh
+mactriage doctor --quick
+```
+
+The result starts with `LOOKS GOOD`, `CHECK RECOMMENDED`, `NEEDS ATTENTION`, or `INCOMPLETE`, includes a non-identifying case ID, and lists at most three best next steps.
+
+![Animated mactriage quick Doctor run](docs/assets/mactriage-demo.gif)
+
+The demo is reproducible from [`docs/demo.tape`](docs/demo.tape) with [VHS](https://github.com/charmbracelet/vhs).
+
 ## The Doctor Command
 
 Run a bounded, read-only health check across the Mac:
 
 ```sh
 mactriage doctor
+mactriage doctor --quick
+mactriage doctor --full
+mactriage doctor --profile fleet --json
 mactriage doctor --severity warning
 mactriage doctor --only storage,memory,cpu,network
 mactriage doctor --skip updates,apps
 mactriage doctor --json --output doctor.json
 ```
 
-Doctor checks startup-disk capacity, memory and swap pressure, CPU load, stalled processes, descriptor-table pressure, core macOS services, cached Software Update availability, recent crash volume, repeated process restarts, registered login/background items, installed-app compatibility, and basic network health. Doctor's compatibility pass is concurrent and skips deep signature verification; use `mactriage scan` when you need that slower integrity check.
+Quick Doctor checks startup-disk capacity, memory and swap pressure, CPU load, descriptor pressure, core services, and network health. Full Doctor also checks cached updates, crashes, restart loops, startup items, application compatibility, battery condition, thermal limits, and Time Machine freshness. Fleet omits update availability for a more stable automation contract. Doctor's compatibility pass skips deep signature verification; use `mactriage scan` for that slower integrity check.
 
-`doctor --fix` may offer eligible actions such as opening Software Update, but every action is explained, separately confirmed, defaults to No, and is verified. It never deletes files, removes login items, installs an update, or changes a system setting.
+`doctor --fix` may offer to open Storage, Network, Login Items, Battery, Time Machine, Software Update, Privacy & Security, or Activity Monitor. Every action is explained, separately confirmed, defaults to No, and is verified. It never deletes files, removes login items, installs an update, or changes a system setting.
+
+## Understand storage and startup load
+
+```sh
+mactriage storage
+mactriage storage --details
+mactriage startup
+```
+
+Storage details report only aggregate sizes for standard categories; filenames are neither displayed nor exported. Startup reports sanitized registered item names/identifiers, or clearly labels its launch-agent fallback. Neither command removes or disables anything.
 
 ## Diagnose network trouble
 
@@ -75,9 +106,10 @@ Doctor checks startup-disk capacity, memory and swap pressure, CPU load, stalled
 mactriage network
 mactriage network example.com
 mactriage network internal.example --json
+mactriage network --detail
 ```
 
-The default target is `example.com`. The command checks DNS resolution, the default route, configured HTTP/HTTPS/SOCKS proxies, active VPN tunnel interfaces, HTTPS reachability, TLS certificate validation, and aggregate listening-socket count. It makes one bounded HTTPS request and never changes DNS, proxy, VPN, or firewall settings.
+The default target is `example.com`. The command checks DNS resolution, the default route, configured proxies, active VPN tunnel interfaces, HTTPS/TLS, and aggregate listening-socket count. `--detail` additionally checks interface availability, self-assigned addressing, Wi-Fi power/association, DNS-server presence, plain HTTP, and clock plausibility. It exports no SSID, local IP, DNS address, or response body, and never changes network settings.
 
 ## Safely relaunch an application
 
@@ -91,13 +123,15 @@ Interactive mode shows the exact running PIDs and warns about unsaved work. Afte
 
 ```sh
 mactriage baseline save healthy-morning
+mactriage baseline save healthy-morning --storage-details
 mactriage baseline list
 mactriage baseline compare healthy-morning
+mactriage baseline compare healthy-morning --storage-details
 mactriage baseline compare healthy-morning after-update
 mactriage baseline delete healthy-morning
 ```
 
-Baselines are sanitized Doctor reports stored atomically with mode `0600` under `~/Library/Application Support/mactriage/baselines`. Comparisons show new and resolved findings, evidence-status changes, disk/memory/CPU/descriptor/startup metric changes, and newly Intel-only apps. Deletion affects only the named baseline and requires confirmation (`--yes` is mandatory when noninteractive).
+Baselines are sanitized Doctor reports stored atomically with mode `0600` under `~/Library/Application Support/mactriage/baselines`. Comparisons show new and resolved findings, evidence-status changes, disk/memory/CPU/descriptor/startup/battery/thermal/backup metric changes, and newly Intel-only apps. `--storage-details` explicitly adds aggregate standard-folder changes without retaining filenames. Deletion affects only the named baseline and requires confirmation (`--yes` is mandatory when noninteractive).
 
 ## Diagnose an application
 
@@ -227,6 +261,19 @@ NO_COLOR=1 mactriage diagnose Discord
 
 `--json` emits schema version `1` and never includes animation or ANSI sequences. `watch --json` emits one NDJSON event per line. Reports and support artifacts written through `--output` use permission mode `0600` and an atomic rename.
 
+Automation controls are global:
+
+```sh
+mactriage --fail-on warning doctor --profile fleet --json
+mactriage --total-timeout 45s doctor --quick
+mactriage --offline doctor --full
+mactriage --redact strict diagnose Discord --no-launch --json
+mactriage schema report
+mactriage schema watch
+```
+
+`--offline` skips Doctor network/update probes and rejects an explicitly requested `network` command. Strict redaction keeps codes, severities, and aggregate measurements while removing app/process identities and user paths. See [schema compatibility](docs/schema-compatibility.md) and [managed-fleet examples](docs/mdm.md).
+
 Exit codes:
 
 | Code | Meaning |
@@ -237,13 +284,25 @@ Exit codes:
 | 3 | Insufficient evidence or inconclusive result |
 | 130 | Interrupted |
 
+## Verify release provenance
+
+Releases include SHA-256 checksums, per-archive SBOMs, and GitHub artifact attestations. After downloading an archive:
+
+```sh
+shasum -a 256 -c checksums.txt
+gh attestation verify mactriage_0.4.0_darwin_arm64.tar.gz --repo Mantaworks/mactriage
+```
+
+Homebrew remains the easiest installation route. The project tracks [Homebrew Core readiness](ROADMAP.md) but will not submit prematurely.
+
 ## Development
 
 ```sh
 make test
 make verify
+make reproducible
 make docs
 make snapshot
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [docs/releasing.md](docs/releasing.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), [ROADMAP.md](ROADMAP.md), and [docs/releasing.md](docs/releasing.md). Questions and feature ideas are welcome in [GitHub Discussions](https://github.com/Mantaworks/mactriage/discussions).

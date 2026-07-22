@@ -1,0 +1,32 @@
+name: Diagnostic rule proposal
+description: Propose a deterministic finding from explicit macOS evidence
+title: "rule: "
+labels: [diagnostic-rule, needs-triage]
+body:
+  - type: input
+    id: symptom
+    attributes:
+      label: User-visible symptom
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Explicit evidence
+      description: Name supported commands, structured fields, or explicit errno/log events. Do not include private raw logs.
+    validations:
+      required: true
+  - type: textarea
+    id: distinction
+    attributes:
+      label: False-positive controls
+      description: Explain how the rule distinguishes this cause from nearby causes.
+    validations:
+      required: true
+  - type: textarea
+    id: action
+    attributes:
+      label: Safe next step
+      description: State what mactriage can safely offer and what must remain manual.
+    validations:
+      required: true

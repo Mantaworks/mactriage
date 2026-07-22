@@ -63,6 +63,7 @@ func Load(path string) (report.Report, error) {
 	}
 	type document struct {
 		SchemaVersion string              `json:"schema_version"`
+		CaseID        string              `json:"case_id"`
 		Command       string              `json:"command"`
 		GeneratedAt   time.Time           `json:"generated_at"`
 		Target        string              `json:"target"`
@@ -79,7 +80,7 @@ func Load(path string) (report.Report, error) {
 	if decoded.SchemaVersion != report.SchemaVersion {
 		return report.Report{}, fmt.Errorf("unsupported report schema %q", decoded.SchemaVersion)
 	}
-	r := report.Report{SchemaVersion: decoded.SchemaVersion, Command: decoded.Command, GeneratedAt: decoded.GeneratedAt, Target: decoded.Target, Host: decoded.Host, Completeness: decoded.Completeness, Findings: decoded.Findings, Actions: decoded.Actions, Evidence: []report.Evidence{}}
+	r := report.Report{SchemaVersion: decoded.SchemaVersion, CaseID: decoded.CaseID, Command: decoded.Command, GeneratedAt: decoded.GeneratedAt, Target: decoded.Target, Host: decoded.Host, Completeness: decoded.Completeness, Findings: decoded.Findings, Actions: decoded.Actions, Evidence: []report.Evidence{}}
 	for _, item := range decoded.Evidence {
 		data, decodeErr := decodeEvidenceData(item.ID, item.Data)
 		if decodeErr != nil {
@@ -154,6 +155,14 @@ func decodeEvidenceData(id report.EvidenceID, raw json.RawMessage) (report.Evide
 		return decodePayload[report.RestartLoopsData](raw)
 	case report.EvidenceRelaunch:
 		return decodePayload[report.RelaunchData](raw)
+	case report.EvidenceBattery:
+		return decodePayload[report.BatteryData](raw)
+	case report.EvidenceThermal:
+		return decodePayload[report.ThermalData](raw)
+	case report.EvidenceBackup:
+		return decodePayload[report.BackupData](raw)
+	case report.EvidenceStorageDetail:
+		return decodePayload[report.StorageDetailsData](raw)
 	default:
 		return nil, nil
 	}
@@ -233,6 +242,40 @@ func appendMetricChanges(comparison *Comparison, before, after report.Report) {
 	if oldValue, ok := beforeData[report.EvidenceLimits].(report.LimitsData); ok {
 		if newValue, exists := afterData[report.EvidenceLimits].(report.LimitsData); exists {
 			appendChange("descriptors.global_used", float64(oldValue.GlobalUsed), float64(newValue.GlobalUsed), "count")
+		}
+	}
+	if oldValue, ok := beforeData[report.EvidenceBattery].(report.BatteryData); ok {
+		if newValue, exists := afterData[report.EvidenceBattery].(report.BatteryData); exists {
+			appendChange("battery.health", oldValue.HealthPercent, newValue.HealthPercent, "percent")
+			appendChange("battery.cycles", float64(oldValue.CycleCount), float64(newValue.CycleCount), "count")
+		}
+	}
+	if oldValue, ok := beforeData[report.EvidenceBackup].(report.BackupData); ok {
+		if newValue, exists := afterData[report.EvidenceBackup].(report.BackupData); exists {
+			appendChange("backup.age", oldValue.LatestAgeHours, newValue.LatestAgeHours, "hours")
+		}
+	}
+	if oldValue, ok := beforeData[report.EvidenceThermal].(report.ThermalData); ok {
+		if newValue, exists := afterData[report.EvidenceThermal].(report.ThermalData); exists {
+			appendChange("thermal.cpu_limit", float64(oldValue.CPUSpeedLimit), float64(newValue.CPUSpeedLimit), "percent")
+		}
+	}
+	if oldValue, ok := beforeData[report.EvidenceStorageDetail].(report.StorageDetailsData); ok {
+		if newValue, exists := afterData[report.EvidenceStorageDetail].(report.StorageDetailsData); exists {
+			oldCategories := map[string]uint64{}
+			newCategories := map[string]uint64{}
+			for _, category := range oldValue.Categories {
+				oldCategories[category.Name] = category.Bytes
+			}
+			for _, category := range newValue.Categories {
+				newCategories[category.Name] = category.Bytes
+				appendChange("storage.category."+category.Name, float64(oldCategories[category.Name]), float64(category.Bytes), "bytes")
+			}
+			for name, beforeBytes := range oldCategories {
+				if _, present := newCategories[name]; !present {
+					appendChange("storage.category."+name, float64(beforeBytes), 0, "bytes")
+				}
+			}
 		}
 	}
 }

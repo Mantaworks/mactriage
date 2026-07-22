@@ -183,6 +183,28 @@ func TestAnalyzeNetworkDistinguishesConnectivityAndConfiguration(t *testing.T) {
 	assertFinding(t, got, "network.vpn_detected", report.Info)
 }
 
+func TestAnalyzeFollowThroughHealthAndNetworkFindings(t *testing.T) {
+	r := report.New("doctor", "this Mac")
+	r.Evidence = []report.Evidence{
+		{ID: report.EvidenceBattery, Status: report.StatusOK, Data: report.BatteryData{Present: true, HealthPercent: 72, Condition: "Service Recommended"}},
+		{ID: report.EvidenceThermal, Status: report.StatusOK, Data: report.ThermalData{CPUSpeedLimit: 75}},
+		{ID: report.EvidenceBackup, Status: report.StatusOK, Data: report.BackupData{Configured: true, HasBackup: true, LatestAgeHours: 240}},
+		{ID: report.EvidenceNetwork, Status: report.StatusOK, Data: report.NetworkData{SelfAssigned: true, RouteStatus: report.StatusOK, DefaultRoute: true, DNSStatus: report.StatusOK, DNSResolved: true, HTTPSStatus: report.StatusOK, HTTPStatus: report.StatusOK, HTTPReachable: true}},
+	}
+	got := diagnosis.Analyze(r)
+	severities := map[string]report.Severity{"doctor.battery_health": report.Warning, "doctor.thermal_pressure": report.Warning, "doctor.backup_stale": report.Warning, "network.self_assigned": report.Error, "network.captive_portal_suspected": report.Warning}
+	for code, severity := range severities {
+		assertFinding(t, got, code, severity)
+	}
+	wantActions := map[report.ActionID]bool{"open.battery": true, "open.activity_monitor": true, "open.time_machine": true, "open.network": true}
+	for _, available := range got.Actions {
+		delete(wantActions, available.ID)
+	}
+	if len(wantActions) != 0 {
+		t.Fatalf("missing actions: %#v in %#v", wantActions, got.Actions)
+	}
+}
+
 func TestAnalyzeNetworkDoesNotDiagnoseUnavailableProbes(t *testing.T) {
 	r := report.New("network", "example.com")
 	r.Evidence = []report.Evidence{{ID: report.EvidenceNetwork, Status: report.StatusPartial, Data: report.NetworkData{

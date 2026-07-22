@@ -1,0 +1,29 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 8 * * 3'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.25.x'
+          cache: true
+      - uses: github/codeql-action/init@c54b30b7df092240050e69945842bc67aee0f0f4 # v4.37.3
+        with:
+          languages: go
+      - uses: github/codeql-action/autobuild@c54b30b7df092240050e69945842bc67aee0f0f4 # v4.37.3
+      - uses: github/codeql-action/analyze@c54b30b7df092240050e69945842bc67aee0f0f4 # v4.37.3
