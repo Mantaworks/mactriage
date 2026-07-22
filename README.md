@@ -26,7 +26,7 @@ The installer verifies the release archive against its published SHA-256 checksu
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantaworks/mactriage/main/install.sh | INSTALL_DIR="$HOME/bin" VERSION=v0.1.0 sh
 ```
 
-To review the installer before running it, download [install.sh](install.sh) and execute it locally. To build from source, use Go 1.24 or newer:
+To review the installer before running it, download [install.sh](install.sh) and execute it locally. To build from source, use Go 1.25.8 or newer:
 
 ```sh
 make build
