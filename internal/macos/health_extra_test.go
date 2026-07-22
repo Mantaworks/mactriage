@@ -2,6 +2,7 @@ package macos_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -28,6 +29,22 @@ func (healthRunner) Run(_ context.Context, path string, args ...string) platform
 		return platform.Result{Stdout: "/Volumes/Backup/2026-07-20-120000"}
 	}
 	return platform.Result{}
+}
+
+type deniedBackupRunner struct{ healthRunner }
+
+func (deniedBackupRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	if path == "/usr/bin/tmutil" && len(args) > 0 && args[0] == "destinationinfo" {
+		return platform.Result{Err: errors.New("operation not permitted"), ExitCode: 1, Stderr: "Operation not permitted"}
+	}
+	return (healthRunner{}).Run(ctx, path, args...)
+}
+
+func TestBackupPermissionFailureIsUnknownNotUnconfigured(t *testing.T) {
+	evidence := (macos.HealthInspector{Runner: deniedBackupRunner{}}).Backup(context.Background())
+	if evidence.Status != report.StatusUnavailable {
+		t.Fatalf("status=%s evidence=%#v", evidence.Status, evidence)
+	}
 }
 
 func TestHealthInspectorReturnsTypedBatteryThermalAndBackupFacts(t *testing.T) {

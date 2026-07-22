@@ -180,9 +180,13 @@ func doctorSnapshot(w io.Writer, r report.Report) {
 				networkFact(data.HTTPSStatus, data.HTTPSReachable, "reachable", "not reachable"),
 				networkFact(data.HTTPSStatus, data.TLSValid, "valid", "not valid"))
 			if data.InterfaceStatus != "" || data.DNSConfigStatus != "" {
-				fmt.Fprintf(w, "            interface %s · Wi-Fi %s · %d DNS servers · clock year %d\n",
+				dnsServers := "unknown"
+				if data.DNSConfigStatus == report.StatusOK {
+					dnsServers = fmt.Sprintf("%d", data.DNSServerCount)
+				}
+				fmt.Fprintf(w, "            interface %s · Wi-Fi %s · DNS servers %s · clock year %d\n",
 					networkFact(data.InterfaceStatus, data.ActiveInterface && !data.SelfAssigned, "active", "unavailable"),
-					networkFact(data.WiFiStatus, data.WiFiPowered && data.WiFiAssociated, "connected", "not connected"), data.DNSServerCount, data.ClockYear)
+					networkFact(data.WiFiStatus, data.WiFiPowered && data.WiFiAssociated, "connected", "not connected"), dnsServers, data.ClockYear)
 			}
 		case report.ScanData:
 			fmt.Fprintf(w, "  Apps      %d inspected\n", len(data.Apps))

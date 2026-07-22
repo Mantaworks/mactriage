@@ -263,12 +263,17 @@ func appendMetricChanges(comparison *Comparison, before, after report.Report) {
 	if oldValue, ok := beforeData[report.EvidenceStorageDetail].(report.StorageDetailsData); ok {
 		if newValue, exists := afterData[report.EvidenceStorageDetail].(report.StorageDetailsData); exists {
 			oldCategories := map[string]uint64{}
+			newCategories := map[string]uint64{}
 			for _, category := range oldValue.Categories {
 				oldCategories[category.Name] = category.Bytes
 			}
 			for _, category := range newValue.Categories {
-				if beforeBytes, present := oldCategories[category.Name]; present {
-					appendChange("storage.category."+category.Name, float64(beforeBytes), float64(category.Bytes), "bytes")
+				newCategories[category.Name] = category.Bytes
+				appendChange("storage.category."+category.Name, float64(oldCategories[category.Name]), float64(category.Bytes), "bytes")
+			}
+			for name, beforeBytes := range oldCategories {
+				if _, present := newCategories[name]; !present {
+					appendChange("storage.category."+name, float64(beforeBytes), 0, "bytes")
 				}
 			}
 		}

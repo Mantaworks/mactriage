@@ -77,7 +77,7 @@ func (h HealthInspector) Backup(ctx context.Context) report.Evidence {
 		return timedOut(report.EvidenceBackup, "Time Machine check timed out")
 	}
 	if destinations.Err != nil {
-		if strings.Contains(strings.ToLower(destinations.Stdout+destinations.Stderr), "no destinations") || destinations.ExitCode == 1 {
+		if strings.Contains(strings.ToLower(destinations.Stdout+destinations.Stderr), "no destinations") {
 			return report.Evidence{ID: report.EvidenceBackup, Status: report.StatusSkipped, Summary: "Time Machine has no configured destination", Data: report.BackupData{}}
 		}
 		return unavailable(report.EvidenceBackup, "Time Machine configuration is unavailable")

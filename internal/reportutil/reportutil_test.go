@@ -79,12 +79,12 @@ func TestCompareReportsHealthMetricsAndNewIntelOnlyApps(t *testing.T) {
 		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 20}},
 		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{SwapUsedBytes: 3 << 30}},
 		{ID: report.EvidenceScan, Status: report.StatusOK, Data: report.ScanData{Apps: []report.ScannedApp{{Name: "Example", Architectures: []string{"x86_64"}}}}},
-		{ID: report.EvidenceStorageDetail, Status: report.StatusOK, Data: report.StorageDetailsData{Categories: []report.StorageCategory{{Name: "Downloads", Bytes: 20}}}},
+		{ID: report.EvidenceStorageDetail, Status: report.StatusOK, Data: report.StorageDetailsData{Categories: []report.StorageCategory{{Name: "Downloads", Bytes: 20}, {Name: "Developer", Bytes: 30}}}},
 	}
 	after.Findings = []report.Finding{{Code: "scan.intel_only", Subjects: []string{"Existing", "Example"}}}
 
 	comparison := reportutil.Compare(before, after)
-	if len(comparison.MetricChanges) < 3 || len(comparison.NewIntelOnly) != 1 || comparison.NewIntelOnly[0] != "Example" {
+	if len(comparison.MetricChanges) < 4 || len(comparison.NewIntelOnly) != 1 || comparison.NewIntelOnly[0] != "Example" {
 		t.Fatalf("comparison=%#v", comparison)
 	}
 }
