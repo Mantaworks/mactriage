@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
       MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
       MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
@@ -33,6 +34,7 @@ jobs:
           test -n "$MACOS_NOTARY_KEY"
           test -n "$MACOS_NOTARY_KEY_ID"
           test -n "$MACOS_NOTARY_ISSUER_ID"
+          test -n "$HOMEBREW_TAP_TOKEN"
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@v0
       - name: Test release commit

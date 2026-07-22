@@ -14,7 +14,13 @@ It is intentionally conservative: it does not disable Gatekeeper or SIP, rewrite
 
 ## Install
 
-Install the latest signed release on Apple silicon or Intel:
+Install the latest signed release on Apple silicon or Intel with Homebrew:
+
+```sh
+brew install --cask Mantaworks/tap/mactriage
+```
+
+Or use the checksum-verifying installer directly:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantaworks/mactriage/main/install.sh | sh
