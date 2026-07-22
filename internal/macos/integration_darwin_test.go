@@ -15,10 +15,36 @@ import (
 )
 
 func TestIntegrationSystemUtilitiesExist(t *testing.T) {
-	for _, path := range []string{"/usr/bin/codesign", "/usr/sbin/spctl", "/usr/bin/xattr", "/usr/bin/lipo", "/usr/bin/otool", "/usr/bin/log", "/usr/sbin/lsof", "/usr/bin/sample", "/usr/bin/pgrep", "/usr/bin/memory_pressure", "/bin/ps"} {
+	for _, path := range []string{"/usr/bin/codesign", "/usr/sbin/spctl", "/usr/bin/xattr", "/usr/bin/lipo", "/usr/bin/otool", "/usr/bin/log", "/usr/sbin/lsof", "/usr/bin/sample", "/usr/bin/pgrep", "/usr/bin/memory_pressure", "/usr/bin/vm_stat", "/usr/bin/uptime", "/usr/bin/curl", "/usr/bin/sfltool", "/usr/sbin/softwareupdate", "/usr/sbin/scutil", "/sbin/route", "/sbin/ifconfig", "/bin/df", "/bin/ps"} {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("required system utility %s: %v", path, err)
 		}
+	}
+}
+
+func TestIntegrationDoctorPassiveHealthChecks(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	runner := platform.ExecRunner{Timeout: 15 * time.Second, MaxOutput: 2 << 20}
+	r, err := (macos.Doctor{Runner: runner}).Inspect(ctx, macos.DoctorOptions{Only: []string{"storage", "memory", "cpu", "descriptors", "services", "startup"}})
+	if err != nil {
+		t.Fatalf("doctor: %v", err)
+	}
+	if len(r.Evidence) != 6 {
+		t.Fatalf("doctor evidence=%d want=6", len(r.Evidence))
+	}
+}
+
+func TestIntegrationNetworkInspectorUsesSystemUtilities(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	runner := platform.ExecRunner{Timeout: 10 * time.Second, MaxOutput: 1 << 20}
+	r, err := (macos.NetworkInspector{Runner: runner}).Inspect(ctx, "localhost")
+	if err != nil {
+		t.Fatalf("network inspector: %v", err)
+	}
+	if len(r.Evidence) != 1 || r.Evidence[0].ID != report.EvidenceNetwork {
+		t.Fatalf("network evidence=%#v", r.Evidence)
 	}
 }
 

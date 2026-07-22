@@ -43,6 +43,14 @@ func TestOpenSecurityActionVerifiesSystemSettings(t *testing.T) {
 	}
 }
 
+func TestOpenSoftwareUpdateActionVerifiesSystemSettings(t *testing.T) {
+	runner := &sequenceRunner{results: []platform.Result{{}, {Stdout: "99\n"}}}
+	_, err := (action.Executor{Runner: runner, PollInterval: time.Millisecond}).Execute(context.Background(), action.OpenSoftwareUpdate, "this Mac")
+	if err != nil || runner.calls != 2 {
+		t.Fatalf("Execute calls=%d error=%v", runner.calls, err)
+	}
+}
+
 func TestActionCatalogContainsPermissionAndFollowup(t *testing.T) {
 	definition, ok := action.Definition(action.RepairSyspolicyd, "/Applications/Example.app")
 	if !ok || !definition.RequiresRoot || len(definition.Command) == 0 || !strings.Contains(definition.Description, "rerun") {
@@ -50,12 +58,86 @@ func TestActionCatalogContainsPermissionAndFollowup(t *testing.T) {
 	}
 }
 
-type sequenceRunner struct {
-	results []platform.Result
-	calls   int
+func TestRelaunchAppTerminatesLaunchesAndVerifiesSurvival(t *testing.T) {
+	runner := &sequenceRunner{results: []platform.Result{
+		{},
+		{Stdout: "99\n"},
+		{Stdout: "99\n"},
+		{},
+		{Stdout: "99\n100\n"},
+		{Stdout: "99\n100\n"},
+	}}
+	executor := action.Executor{Runner: runner, PollInterval: time.Millisecond, TerminateTimeout: 10 * time.Millisecond}
+	result, err := executor.RelaunchApp(context.Background(), "/Applications/Example.app", "Example", []int{10, 11}, false, time.Millisecond)
+	if err != nil {
+		t.Fatalf("RelaunchApp returned error: %v", err)
+	}
+	if len(result.OldPIDs) != 2 || len(result.NewPIDs) != 1 || result.NewPIDs[0] != 100 || !result.Survived || result.Forced {
+		t.Fatalf("unexpected relaunch result: %#v", result)
+	}
+	if len(runner.commands) == 0 || runner.commands[0] != "/bin/kill -TERM 10 11" {
+		t.Fatalf("unapproved PID was signaled: %#v", runner.commands)
+	}
 }
 
-func (r *sequenceRunner) Run(context.Context, string, ...string) platform.Result {
+func TestForcedRelaunchSignalsOnlyStillRunningApprovedPIDs(t *testing.T) {
+	runner := &sequenceRunner{results: []platform.Result{
+		{Stdout: "11\n99\n"},
+		{},
+		{Stdout: "99\n"},
+		{Stdout: "99\n"},
+		{},
+		{Stdout: "99\n100\n"},
+		{Stdout: "99\n100\n"},
+	}}
+	executor := action.Executor{Runner: runner, PollInterval: time.Millisecond, TerminateTimeout: 10 * time.Millisecond}
+	result, err := executor.RelaunchApp(context.Background(), "/Applications/Example.app", "Example", []int{10, 11}, true, time.Millisecond)
+	if err != nil || !result.Forced || !result.Survived {
+		t.Fatalf("result=%#v error=%v", result, err)
+	}
+	if len(runner.commands) < 2 || runner.commands[1] != "/bin/kill -KILL 11" {
+		t.Fatalf("force signal escaped approved live set: %#v", runner.commands)
+	}
+}
+
+func TestRelaunchFailsClosedWhenProcessVerificationIsUnavailable(t *testing.T) {
+	runner := &sequenceRunner{results: []platform.Result{
+		{},
+		{ExitCode: -1, Err: errors.New("pgrep unavailable")},
+	}}
+	executor := action.Executor{Runner: runner, PollInterval: time.Millisecond, TerminateTimeout: 10 * time.Millisecond}
+	_, err := executor.RelaunchApp(context.Background(), "/Applications/Example.app", "Example", []int{10}, false, time.Millisecond)
+	if err == nil || errors.Is(err, action.ErrProcessStillRunning) {
+		t.Fatalf("verification failure was not preserved: %v", err)
+	}
+	for _, command := range runner.commands {
+		if strings.HasPrefix(command, "/usr/bin/open ") {
+			t.Fatalf("application reopened after failed verification: %#v", runner.commands)
+		}
+	}
+}
+
+func TestRelaunchFailsClosedWhenPreOpenSnapshotIsUnavailable(t *testing.T) {
+	runner := &sequenceRunner{results: []platform.Result{
+		{},
+		{Stdout: "99\n"},
+		{ExitCode: -1, Err: errors.New("pgrep unavailable")},
+	}}
+	executor := action.Executor{Runner: runner, PollInterval: time.Millisecond, TerminateTimeout: 10 * time.Millisecond}
+	_, err := executor.RelaunchApp(context.Background(), "/Applications/Example.app", "Example", []int{10}, false, time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "snapshot processes") {
+		t.Fatalf("pre-open verification failure was hidden: %v", err)
+	}
+}
+
+type sequenceRunner struct {
+	results  []platform.Result
+	calls    int
+	commands []string
+}
+
+func (r *sequenceRunner) Run(_ context.Context, path string, args ...string) platform.Result {
+	r.commands = append(r.commands, path+" "+strings.Join(args, " "))
 	if r.calls >= len(r.results) {
 		return platform.Result{ExitCode: 1, Err: errors.New("unexpected call")}
 	}

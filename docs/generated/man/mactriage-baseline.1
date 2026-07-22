@@ -1,0 +1,55 @@
+.nh
+.TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
+
+.SH NAME
+mactriage-baseline - Save and compare private Mac health snapshots
+
+
+.SH SYNOPSIS
+\fBmactriage baseline [flags]\fP
+
+
+.SH DESCRIPTION
+Save and compare private Mac health snapshots
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for baseline
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--accessible\fP[=false]
+	use screen-reader-friendly prompts and static progress
+
+.PP
+\fB--animation\fP="auto"
+	animation mode: auto, always, or never
+
+.PP
+\fB--color\fP="auto"
+	color mode: auto, always, or never
+
+.PP
+\fB--json\fP[=false]
+	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB-o\fP, \fB--output\fP=""
+	write the command's private report or artifact to PATH
+
+.PP
+\fB--plain\fP[=false]
+	disable color, animation, and terminal UI control sequences
+
+.PP
+\fB--timeout\fP=15s
+	timeout for each macOS evidence command
+
+.PP
+\fB-v\fP, \fB--verbose\fP[=false]
+	show the macOS commands being run on stderr
+
+
+.SH SEE ALSO
+\fBmactriage(1)\fP, \fBmactriage-baseline-compare(1)\fP, \fBmactriage-baseline-delete(1)\fP, \fBmactriage-baseline-list(1)\fP, \fBmactriage-baseline-save(1)\fP

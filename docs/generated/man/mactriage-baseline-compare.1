@@ -1,0 +1,63 @@
+.nh
+.TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
+
+.SH NAME
+mactriage-baseline-compare - Compare a baseline with another baseline or this Mac now
+
+
+.SH SYNOPSIS
+\fBmactriage baseline compare  [other-baseline] [flags]\fP
+
+
+.SH DESCRIPTION
+Compare a baseline with another baseline or this Mac now
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for compare
+
+.PP
+\fB--only\fP=[]
+	run only selected doctor checks for the current comparison
+
+.PP
+\fB--skip\fP=[]
+	skip selected doctor checks for the current comparison
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--accessible\fP[=false]
+	use screen-reader-friendly prompts and static progress
+
+.PP
+\fB--animation\fP="auto"
+	animation mode: auto, always, or never
+
+.PP
+\fB--color\fP="auto"
+	color mode: auto, always, or never
+
+.PP
+\fB--json\fP[=false]
+	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB-o\fP, \fB--output\fP=""
+	write the command's private report or artifact to PATH
+
+.PP
+\fB--plain\fP[=false]
+	disable color, animation, and terminal UI control sequences
+
+.PP
+\fB--timeout\fP=15s
+	timeout for each macOS evidence command
+
+.PP
+\fB-v\fP, \fB--verbose\fP[=false]
+	show the macOS commands being run on stderr
+
+
+.SH SEE ALSO
+\fBmactriage-baseline(1)\fP

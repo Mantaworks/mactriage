@@ -4,11 +4,11 @@
 
 <h1 align="center">MacTriage</h1>
 
-<p align="center">Understand what is wrong with a Mac app—and what to do next.</p>
+<p align="center">Understand what is wrong with your Mac—and what to do next.</p>
 
 `mactriage` supports macOS 13 Ventura and newer on Apple silicon and Intel Macs.
 
-`mactriage` is a guided macOS application troubleshooter. It diagnoses launch failures, frozen or resource-heavy processes, privacy-permission denials, installed-app compatibility, and system resource pressure. Its reports combine bundle, code-signing, Gatekeeper, architecture, dependency, launch, crash, unified-log, process, and file-descriptor evidence into ranked findings written in plain language.
+`mactriage` is a guided macOS troubleshooter. **v0.3.0 — The Doctor Command** adds whole-Mac health checks, network diagnosis, verified app relaunches, private health baselines, and shareable support reports to its existing launch, permission, compatibility, and resource diagnostics. Results are ranked and written in plain language.
 
 It is intentionally conservative: it does not disable Gatekeeper or SIP, rewrite signatures, reset security databases, recursively remove quarantine attributes, or delete application data.
 
@@ -31,7 +31,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantawor
 The installer verifies the release archive against its published SHA-256 checksum and installs to `/usr/local/bin` when writable, otherwise `~/.local/bin`. Set `INSTALL_DIR` or `VERSION` to override either choice:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantaworks/mactriage/main/install.sh | INSTALL_DIR="$HOME/bin" VERSION=v0.2.0 sh
+curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantaworks/mactriage/main/install.sh | INSTALL_DIR="$HOME/bin" VERSION=v0.3.0 sh
 ```
 
 To review the installer before running it, download [install.sh](install.sh) and execute it locally. To build from source, use Go 1.25.8 or newer:
@@ -52,6 +52,52 @@ mactriage
 ```
 
 In a terminal it opens a colorful guided menu that asks what is wrong, requests only the target it needs, and runs the appropriate diagnostic. Terminal history remains intact. Scripts and experienced users can continue to use the regular subcommands and flags documented below.
+
+## The Doctor Command
+
+Run a bounded, read-only health check across the Mac:
+
+```sh
+mactriage doctor
+mactriage doctor --severity warning
+mactriage doctor --only storage,memory,cpu,network
+mactriage doctor --skip updates,apps
+mactriage doctor --json --output doctor.json
+```
+
+Doctor checks startup-disk capacity, memory and swap pressure, CPU load, stalled processes, descriptor-table pressure, core macOS services, cached Software Update availability, recent crash volume, repeated process restarts, registered login/background items, installed-app compatibility, and basic network health. Doctor's compatibility pass is concurrent and skips deep signature verification; use `mactriage scan` when you need that slower integrity check.
+
+`doctor --fix` may offer eligible actions such as opening Software Update, but every action is explained, separately confirmed, defaults to No, and is verified. It never deletes files, removes login items, installs an update, or changes a system setting.
+
+## Diagnose network trouble
+
+```sh
+mactriage network
+mactriage network example.com
+mactriage network internal.example --json
+```
+
+The default target is `example.com`. The command checks DNS resolution, the default route, configured HTTP/HTTPS/SOCKS proxies, active VPN tunnel interfaces, HTTPS reachability, TLS certificate validation, and aggregate listening-socket count. It makes one bounded HTTPS request and never changes DNS, proxy, VPN, or firewall settings.
+
+## Safely relaunch an application
+
+```sh
+mactriage relaunch Discord
+```
+
+Interactive mode shows the exact running PIDs and warns about unsaved work. After confirmation, it requests graceful termination with `SIGTERM`, waits, reopens the application, and verifies that it survives the observation window. If the app refuses to quit, `SIGKILL` requires a second default-No confirmation. JSON and noninteractive runs report the available action without performing it.
+
+## Save and compare healthy baselines
+
+```sh
+mactriage baseline save healthy-morning
+mactriage baseline list
+mactriage baseline compare healthy-morning
+mactriage baseline compare healthy-morning after-update
+mactriage baseline delete healthy-morning
+```
+
+Baselines are sanitized Doctor reports stored atomically with mode `0600` under `~/Library/Application Support/mactriage/baselines`. Comparisons show new and resolved findings, evidence-status changes, disk/memory/CPU/descriptor/startup metric changes, and newly Intel-only apps. Deletion affects only the named baseline and requires confirmation (`--yes` is mandatory when noninteractive).
 
 ## Diagnose an application
 
@@ -126,9 +172,11 @@ The bundle never contains raw unified logs, crash reports, process samples, or u
 mactriage summarize report.json
 mactriage compare before.json after.json
 mactriage explain gatekeeper.rejected
+mactriage share report.json --output issue.md
+mactriage share Discord --copy
 ```
 
-`summarize` produces help-desk/GitHub-ready Markdown. `compare` shows new, resolved, unchanged, and evidence-status changes. `explain` translates a stable finding code into meaning, next steps, and safety boundaries.
+`summarize` produces help-desk/GitHub-ready Markdown. `share` accepts a saved report or performs a passive app diagnosis, previews sanitized Markdown, writes private output, and offers clipboard copy only after permission; it never uploads. `compare` shows finding, evidence, and health-metric changes. `explain` translates a stable finding code into meaning, next steps, and safety boundaries.
 
 ## Inspect descriptor pressure
 
@@ -155,7 +203,7 @@ mactriage watch Discord \
 
 ## Safe recovery
 
-When evidence strongly indicates a wedged `syspolicyd`, an interactive diagnosis offers to restart it. The action is shown in advance, defaults to No, elevates only after permission, verifies that launchd starts a new PID, and reruns the affected diagnosis.
+When evidence strongly indicates a wedged `syspolicyd`, an interactive diagnosis offers to restart it. The action is shown in advance, defaults to No, elevates only after permission, verifies that launchd starts a new PID, and reruns the affected diagnosis. Doctor, relaunch, and share follow the same explain-confirm-verify model.
 
 The same action can be requested directly:
 

@@ -134,4 +134,14 @@ func (a *application) renderComparison(comparison reportutil.Comparison) {
 			fmt.Fprintf(a.config.Out, "  %s: %s → %s\n", change.ID, change.Before, change.After)
 		}
 	}
+	if len(comparison.MetricChanges) > 0 {
+		fmt.Fprintln(a.config.Out, "\nHealth metric changes")
+		for _, change := range comparison.MetricChanges {
+			fmt.Fprintf(a.config.Out, "  %s: %.1f → %.1f %s\n", change.Metric, change.Before, change.After, change.Unit)
+		}
+	}
+	if len(comparison.NewIntelOnly) > 0 {
+		fmt.Fprintln(a.config.Out, "\nNew Intel-only applications")
+		fmt.Fprintln(a.config.Out, "  "+strings.Join(comparison.NewIntelOnly, "\n  "))
+	}
 }

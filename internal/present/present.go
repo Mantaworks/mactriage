@@ -41,6 +41,9 @@ func Human(w io.Writer, r report.Report, style Style) {
 	}
 	fmt.Fprintln(w, decorate(title, "12", true, style.Color))
 	fmt.Fprintf(w, "Command: %s   Evidence: %d   Completeness: %s\n", r.Command, len(r.Evidence), strings.ToUpper(string(r.Completeness)))
+	if r.Command == "doctor" {
+		doctorSnapshot(w, r)
+	}
 
 	if len(r.Findings) == 0 {
 		if r.Completeness == report.Partial {
@@ -69,6 +72,42 @@ func Human(w io.Writer, r report.Report, style Style) {
 			fmt.Fprintf(w, "  → %s%s\n    %s\n", action.Title, root, wrap(action.Description, width-4))
 		}
 	}
+}
+
+func doctorSnapshot(w io.Writer, r report.Report) {
+	if len(r.Evidence) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "\nHealth snapshot")
+	for _, evidence := range r.Evidence {
+		switch data := evidence.Data.(type) {
+		case report.StorageData:
+			fmt.Fprintf(w, "  Disk      %.1f%% available\n", data.AvailablePercent)
+		case report.MemoryData:
+			fmt.Fprintf(w, "  Memory    %.1f%% readily available · %d MiB swap used\n", data.FreePercent, data.SwapUsedBytes>>20)
+		case report.CPUData:
+			fmt.Fprintf(w, "  CPU       load %.2f across %d logical cores\n", data.LoadOne, data.LogicalCores)
+		case report.NetworkData:
+			fmt.Fprintf(w, "  Network   DNS %s · HTTPS %s · TLS %s\n",
+				networkFact(data.DNSStatus, data.DNSResolved, "resolved", "not resolved"),
+				networkFact(data.HTTPSStatus, data.HTTPSReachable, "reachable", "not reachable"),
+				networkFact(data.HTTPSStatus, data.TLSValid, "valid", "not valid"))
+		case report.ScanData:
+			fmt.Fprintf(w, "  Apps      %d inspected\n", len(data.Apps))
+		case report.StartupItemsData:
+			fmt.Fprintf(w, "  Startup   %d registered items\n", data.Count)
+		}
+	}
+}
+
+func networkFact(status report.Status, value bool, whenTrue, whenFalse string) string {
+	if status != report.StatusOK {
+		return "unknown"
+	}
+	if value {
+		return whenTrue
+	}
+	return whenFalse
 }
 
 func HumanWatch(w io.Writer, timestamp string, severity report.Severity, message string, color bool) {

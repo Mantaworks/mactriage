@@ -169,14 +169,17 @@ func (r Resolver) readBundle(ctx context.Context, path string) (App, error) {
 	if r.Runner == nil {
 		return App{}, errors.New("application resolver requires a command runner")
 	}
-	plistPath := filepath.Join(realPath, "Contents", "Info.plist")
+	plistPath, executableDir := bundleLayout(realPath)
 	result := r.Runner.Run(ctx, "/usr/bin/plutil", "-convert", "json", "-o", "-", plistPath)
-	if result.Err != nil {
-		return App{}, fmt.Errorf("invalid Info.plist in %s", realPath)
-	}
 	var values map[string]any
-	if err := json.Unmarshal([]byte(result.Stdout), &values); err != nil {
-		return App{}, fmt.Errorf("invalid Info.plist JSON in %s: %w", realPath, err)
+	if result.Err == nil {
+		_ = json.Unmarshal([]byte(result.Stdout), &values)
+	}
+	if values == nil {
+		values, err = r.extractBundleValues(ctx, plistPath)
+		if err != nil {
+			return App{}, fmt.Errorf("invalid Info.plist in %s: %w", realPath, err)
+		}
 	}
 	app := App{
 		Path:       realPath,
@@ -190,9 +193,38 @@ func (r Resolver) readBundle(ctx context.Context, path string) (App, error) {
 		app.Name = strings.TrimSuffix(filepath.Base(realPath), ".app")
 	}
 	if app.Executable != "" {
-		app.ExecutablePath = filepath.Join(realPath, "Contents", "MacOS", app.Executable)
+		app.ExecutablePath = filepath.Join(executableDir, app.Executable)
 	}
 	return app, nil
+}
+
+func bundleLayout(path string) (plistPath, executableDir string) {
+	contents := filepath.Join(path, "Contents")
+	if _, err := os.Stat(filepath.Join(contents, "Info.plist")); err == nil {
+		return filepath.Join(contents, "Info.plist"), filepath.Join(contents, "MacOS")
+	}
+	wrapped := filepath.Join(path, "WrappedBundle")
+	if realWrapped, err := filepath.EvalSymlinks(wrapped); err == nil {
+		if _, statErr := os.Stat(filepath.Join(realWrapped, "Info.plist")); statErr == nil {
+			return filepath.Join(realWrapped, "Info.plist"), realWrapped
+		}
+	}
+	return filepath.Join(contents, "Info.plist"), filepath.Join(contents, "MacOS")
+}
+
+func (r Resolver) extractBundleValues(ctx context.Context, plistPath string) (map[string]any, error) {
+	if lint := r.Runner.Run(ctx, "/usr/bin/plutil", "-lint", "--", plistPath); lint.Err != nil {
+		return nil, errors.New("property list validation failed")
+	}
+	keys := []string{"CFBundleDisplayName", "CFBundleName", "CFBundleIdentifier", "CFBundleExecutable", "CFBundleShortVersionString", "CFBundleVersion", "LSMinimumSystemVersion"}
+	values := make(map[string]any, len(keys))
+	for _, key := range keys {
+		result := r.Runner.Run(ctx, "/usr/bin/plutil", "-extract", key, "raw", "-o", "-", plistPath)
+		if result.Err == nil {
+			values[key] = strings.TrimSpace(result.Stdout)
+		}
+	}
+	return values, nil
 }
 
 func stringValue(values map[string]any, key string) string {

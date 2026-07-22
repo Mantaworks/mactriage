@@ -86,3 +86,33 @@ func TestWriteAtomicUsesPrivateMode(t *testing.T) {
 		t.Fatalf("mode=%#o, want 0600", info.Mode().Perm())
 	}
 }
+
+func TestHumanDoctorRendererShowsReadableHealthSnapshot(t *testing.T) {
+	r := report.New("doctor", "this Mac")
+	r.Evidence = []report.Evidence{
+		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 42}},
+		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{FreePercent: 31, SwapUsedBytes: 512 << 20}},
+		{ID: report.EvidenceCPU, Status: report.StatusOK, Data: report.CPUData{LoadOne: 2.5, LogicalCores: 8}},
+		{ID: report.EvidenceNetwork, Status: report.StatusOK, Data: report.NetworkData{DNSStatus: report.StatusOK, HTTPSStatus: report.StatusOK, DNSResolved: true, HTTPSReachable: true, TLSValid: true}},
+	}
+	var out bytes.Buffer
+	present.Human(&out, r, present.Style{Width: 80})
+	for _, want := range []string{"Health snapshot", "Disk", "Memory", "CPU", "Network"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("doctor output missing %q: %s", want, out.String())
+		}
+	}
+}
+
+func TestHumanDoctorRendererShowsUnavailableNetworkFactsAsUnknown(t *testing.T) {
+	r := report.New("doctor", "this Mac")
+	r.Completeness = report.Partial
+	r.Evidence = []report.Evidence{{ID: report.EvidenceNetwork, Status: report.StatusPartial, Data: report.NetworkData{
+		DNSStatus: report.StatusUnavailable, HTTPSStatus: report.StatusTimedOut,
+	}}}
+	var out bytes.Buffer
+	present.Human(&out, r, present.Style{})
+	if strings.Count(out.String(), "unknown") != 3 || strings.Contains(out.String(), "not resolved") {
+		t.Fatalf("unavailable network facts were rendered as measurements: %q", out.String())
+	}
+}

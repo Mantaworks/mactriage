@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Mantaworks/mactriage/internal/present"
 	"github.com/Mantaworks/mactriage/internal/report"
@@ -66,11 +68,11 @@ func WriteBundle(path string, r report.Report) (Manifest, error) {
 
 func MarkdownSummary(r report.Report) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "# mactriage summary\n\n- Command: `%s`\n", r.Command)
+	fmt.Fprintf(&b, "# mactriage summary\n\n- Command: `%s`\n", sanitize(r.Command))
 	if r.Target != "" {
-		fmt.Fprintf(&b, "- Target: `%s`\n", r.Target)
+		fmt.Fprintf(&b, "- Target: `%s`\n", sanitize(r.Target))
 	}
-	fmt.Fprintf(&b, "- Completeness: %s\n- macOS: %s (%s)\n\n", r.Completeness, fallback(r.Host.OSVersion, "unknown"), fallback(r.Host.Arch, "unknown"))
+	fmt.Fprintf(&b, "- Completeness: %s\n- macOS: %s (%s)\n\n", sanitize(string(r.Completeness)), sanitize(fallback(r.Host.OSVersion, "unknown")), sanitize(fallback(r.Host.Arch, "unknown")))
 	if len(r.Findings) == 0 {
 		b.WriteString("## Findings\n\nNo diagnostic problems were identified.\n")
 		return b.String()
@@ -81,13 +83,26 @@ func MarkdownSummary(r report.Report) string {
 	})
 	b.WriteString("## Findings\n\n")
 	for _, finding := range findings {
-		fmt.Fprintf(&b, "- **%s — %s** (`%s`): %s", strings.ToUpper(string(finding.Severity)), finding.Title, finding.Code, finding.Explanation)
+		fmt.Fprintf(&b, "- **%s — %s** (`%s`): %s", strings.ToUpper(sanitize(string(finding.Severity))), sanitize(finding.Title), sanitize(finding.Code), sanitize(finding.Explanation))
 		if finding.Recommendation != "" {
-			fmt.Fprintf(&b, " Next: %s", finding.Recommendation)
+			fmt.Fprintf(&b, " Next: %s", sanitize(finding.Recommendation))
 		}
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+func sanitize(value string) string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		value = strings.ReplaceAll(value, home, "~")
+	}
+	value = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, value)
+	return strings.ReplaceAll(value, "`", "'")
 }
 
 func fallback(value, replacement string) string {

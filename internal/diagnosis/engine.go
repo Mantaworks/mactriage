@@ -2,6 +2,7 @@ package diagnosis
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/Mantaworks/mactriage/internal/action"
@@ -87,8 +88,115 @@ func Analyze(r report.Report) report.Report {
 			addFinding(&r, knowledge.CodeScanOSUnsupported, report.Error, "Some applications require a newer macOS", scanExplanation(names, "declare a newer minimum macOS version"), "high", []report.EvidenceID{report.EvidenceScan}, "Update macOS or install compatible application versions.")
 		}
 		if names := affected["intel_only"]; len(names) > 0 {
-			addFinding(&r, knowledge.CodeScanIntelOnly, report.Warning, "Some applications are Intel-only", scanExplanation(names, "require Rosetta on this Apple silicon Mac"), "high", []report.EvidenceID{report.EvidenceScan}, "Check publishers for Apple silicon-native updates.")
+			addFindingWithSubjects(&r, knowledge.CodeScanIntelOnly, report.Warning, "Some applications are Intel-only", scanExplanation(names, "require Rosetta on this Apple silicon Mac"), "high", []report.EvidenceID{report.EvidenceScan}, "Check publishers for Apple silicon-native updates.", names)
 		}
+	}
+	storage, hasStorage := byID[report.EvidenceStorage].Data.(report.StorageData)
+	if hasStorage && storage.AvailablePercent < 15 {
+		severity := report.Warning
+		if storage.AvailablePercent <= 5 {
+			severity = report.Error
+		}
+		addFinding(&r, knowledge.CodeDoctorStorageLow, severity, "Startup disk space is low", fmt.Sprintf("Only %.1f%% of the startup disk is available.", storage.AvailablePercent), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceStorage}, "Free space by moving or removing files you recognize, then rerun doctor.")
+	}
+	memory, hasMemory := byID[report.EvidenceMemory].Data.(report.MemoryData)
+	if hasMemory && ((memory.FreePercent > 0 && memory.FreePercent <= 10) || (memory.FreePercent == 0 && memory.SwapUsedBytes >= 4<<30)) {
+		addFinding(&r, knowledge.CodeDoctorMemoryPressure, report.Warning, "Memory pressure is elevated", fmt.Sprintf("Readily available memory is %.1f%% and swap usage is %d MiB.", memory.FreePercent, memory.SwapUsedBytes>>20), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceMemory}, "Close memory-heavy applications and check whether pressure falls.")
+	}
+	cpu, hasCPU := byID[report.EvidenceCPU].Data.(report.CPUData)
+	if hasCPU && ((cpu.LogicalCores > 0 && cpu.LoadOne >= float64(cpu.LogicalCores)*1.5) || cpu.HighestPercent >= 90) {
+		explanation := fmt.Sprintf("The one-minute load is %.2f across %d logical cores.", cpu.LoadOne, cpu.LogicalCores)
+		if cpu.HighestProcess != "" {
+			explanation += fmt.Sprintf(" %s is currently using %.1f%% CPU.", cpu.HighestProcess, cpu.HighestPercent)
+		}
+		addFinding(&r, knowledge.CodeDoctorCPUPressure, report.Warning, "CPU pressure is elevated", explanation, report.ConfidenceMedium, []report.EvidenceID{report.EvidenceCPU}, "Observe the busiest process and capture a sample if usage persists.")
+	}
+	stalledProcesses := 0
+	for state, count := range cpu.ProcessStates {
+		if strings.ContainsAny(state, "DUT") {
+			stalledProcesses += count
+		}
+	}
+	if hasCPU && stalledProcesses > 0 {
+		addFinding(&r, knowledge.CodeDoctorProcessStalled, report.Warning, "A process may be stalled or suspended", fmt.Sprintf("%d processes were stopped, suspended, or waiting uninterruptibly.", stalledProcesses), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceCPU}, "Use mactriage hang on the affected process before relaunching it.")
+	}
+	doctorLimits, hasDoctorLimits := byID[report.EvidenceLimits].Data.(report.LimitsData)
+	if r.Command == "doctor" && hasDoctorLimits && doctorLimits.GlobalMax > 0 && float64(doctorLimits.GlobalUsed) >= float64(doctorLimits.GlobalMax)*0.8 {
+		addFinding(&r, knowledge.CodeDoctorDescriptorPressure, report.Warning, "System descriptor pressure is high", fmt.Sprintf("The global file table is using %d of %d entries.", doctorLimits.GlobalUsed, doctorLimits.GlobalMax), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceLimits}, "Use mactriage system --top to identify aggregate descriptor consumers.")
+	}
+	services, hasServices := byID[report.EvidenceServices].Data.(report.ServicesData)
+	if hasServices {
+		var missing []string
+		for name, running := range services.Running {
+			if services.Statuses[name] == report.StatusOK && !running {
+				missing = append(missing, name)
+			}
+		}
+		if len(missing) > 0 {
+			sort.Strings(missing)
+			addFinding(&r, knowledge.CodeDoctorServiceMissing, report.Error, "A core macOS service is unavailable", "Not running when checked: "+strings.Join(missing, ", ")+".", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceServices}, "Retry doctor; restart only a service mactriage explicitly confirms is wedged.")
+		}
+	}
+	updates, hasUpdates := byID[report.EvidenceUpdates].Data.(report.UpdatesData)
+	if hasUpdates && updates.Available {
+		confidence := report.ConfidenceHigh
+		explanation := "macOS reported one or more available updates."
+		if updates.Cached {
+			confidence = report.ConfidenceMedium
+			explanation = "The cached Software Update state contains one or more available updates."
+		}
+		addFinding(&r, knowledge.CodeDoctorUpdatesAvailable, report.Info, "Software updates are available", explanation, confidence, []report.EvidenceID{report.EvidenceUpdates}, "Open Software Update to refresh and review the offered updates.")
+		addAction(&r, action.OpenSoftwareUpdate)
+	}
+	crashes, hasCrashes := byID[report.EvidenceRecentCrashes].Data.(report.RecentCrashesData)
+	if hasCrashes && crashes.Count >= 10 {
+		addFinding(&r, knowledge.CodeDoctorCrashVolume, report.Warning, "Many recent crashes were found", fmt.Sprintf("macOS created %d crash reports during the last day.", crashes.Count), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceRecentCrashes}, "Identify repeated application names and diagnose the affected app.")
+	}
+	startup, hasStartup := byID[report.EvidenceStartupItems].Data.(report.StartupItemsData)
+	if hasStartup && startup.Count >= 100 {
+		label := "startup items"
+		if startup.Source == "background-task-management" {
+			label = "registered login and background items"
+		}
+		addFinding(&r, knowledge.CodeDoctorStartupItemsHigh, report.Warning, "Many startup items are installed", fmt.Sprintf("Found %d %s.", startup.Count, label), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceStartupItems}, "Review Login Items in System Settings; mactriage will not remove them.")
+	}
+	restarts, hasRestarts := byID[report.EvidenceRestartLoops].Data.(report.RestartLoopsData)
+	if hasRestarts && len(restarts.Processes) > 0 {
+		labels := make([]string, 0, len(restarts.Processes))
+		for _, process := range restarts.Processes {
+			if process.Count >= 3 {
+				labels = append(labels, fmt.Sprintf("%s (%d)", process.Name, process.Count))
+			}
+		}
+		if len(labels) > 0 {
+			addFinding(&r, knowledge.CodeDoctorRestartLoop, report.Warning, "A process is repeatedly restarting", "Repeated exits in the last ten minutes: "+strings.Join(labels, ", ")+".", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceRestartLoops}, "Diagnose or update the named process; do not repeatedly force-restart its parent service.")
+		}
+	}
+	network, hasNetwork := byID[report.EvidenceNetwork].Data.(report.NetworkData)
+	if hasNetwork {
+		if network.RouteStatus == report.StatusOK && !network.DefaultRoute {
+			addFinding(&r, knowledge.CodeNetworkNoRoute, report.Error, "No default network route was found", "The Mac did not report a default route for internet traffic.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Reconnect Wi-Fi or Ethernet and review VPN configuration.")
+		}
+		if network.DNSStatus == report.StatusOK && !network.DNSResolved {
+			addFinding(&r, knowledge.CodeNetworkDNSFailed, report.Error, "DNS lookup failed", fmt.Sprintf("%s did not resolve through the current DNS configuration.", network.Host), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the hostname, VPN, DNS service, and network connection.")
+		}
+		if network.HTTPSStatus == report.StatusOK && network.HTTPSReachable && !network.TLSValid {
+			addFinding(&r, knowledge.CodeNetworkTLSInvalid, report.Error, "TLS certificate validation failed", "The host was reachable, but its certificate could not be validated.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the date, proxy or VPN interception, and the site's certificate; do not bypass validation.")
+		} else if network.HTTPSStatus == report.StatusOK && !network.HTTPSReachable {
+			addFinding(&r, knowledge.CodeNetworkHTTPSFailed, report.Error, "HTTPS connection failed", fmt.Sprintf("Could not establish an HTTPS connection to %s.", network.Host), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check connectivity, proxy, VPN, and firewall policy.")
+		}
+		if network.ProxyStatus == report.StatusOK && network.ProxyConfigured {
+			addFinding(&r, knowledge.CodeNetworkProxyDetected, report.Info, "A network proxy is configured", "A system HTTP, HTTPS, or SOCKS proxy is enabled.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Confirm the proxy is expected and available.")
+		}
+		if network.VPNStatus == report.StatusOK && len(network.VPNInterfaces) > 0 {
+			addFinding(&r, knowledge.CodeNetworkVPNDetected, report.Info, "A VPN interface is active", fmt.Sprintf("Active tunnel interfaces: %s.", strings.Join(network.VPNInterfaces, ", ")), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Compare with the VPN disconnected only if your policy permits it.")
+		}
+		if network.ListenersStatus == report.StatusOK && network.ListeningSocketCount >= 1000 {
+			addFinding(&r, knowledge.CodeNetworkListenersHigh, report.Warning, "Many listening sockets are open", fmt.Sprintf("Counted %d listening TCP descriptors.", network.ListeningSocketCount), report.ConfidenceMedium, []report.EvidenceID{report.EvidenceNetwork}, "Use system monitoring to identify the largest socket owners.")
+		}
+	}
+	if relaunch := byID[report.EvidenceRelaunch]; relaunch.ID != "" && relaunch.Status == report.StatusFailed {
+		addFinding(&r, knowledge.CodeRelaunchFailed, report.Error, "Application relaunch failed", relaunch.Error, report.ConfidenceHigh, []report.EvidenceID{report.EvidenceRelaunch}, "Review the reported step and diagnose the app before trying again.")
 	}
 
 	logs, _ := byID[report.EvidenceLogs].Data.(report.LogsData)
@@ -233,6 +341,10 @@ func nearGlobalLimit(status report.Status, limits report.LimitsData) bool {
 }
 
 func addFinding[T ~string](r *report.Report, code string, severity report.Severity, title, explanation string, confidence report.Confidence, evidence []T, recommendation string) {
+	addFindingWithSubjects(r, code, severity, title, explanation, confidence, evidence, recommendation, nil)
+}
+
+func addFindingWithSubjects[T ~string](r *report.Report, code string, severity report.Severity, title, explanation string, confidence report.Confidence, evidence []T, recommendation string, subjects []string) {
 	for _, existing := range r.Findings {
 		if existing.Code == code {
 			return
@@ -242,7 +354,7 @@ func addFinding[T ~string](r *report.Report, code string, severity report.Severi
 	for _, id := range evidence {
 		evidenceIDs = append(evidenceIDs, report.EvidenceID(id))
 	}
-	r.Findings = append(r.Findings, report.Finding{Code: code, Severity: severity, Title: title, Explanation: explanation, Confidence: confidence, EvidenceIDs: evidenceIDs, Recommendation: recommendation})
+	r.Findings = append(r.Findings, report.Finding{Code: code, Severity: severity, Title: title, Explanation: explanation, Confidence: confidence, EvidenceIDs: evidenceIDs, Subjects: append([]string(nil), subjects...), Recommendation: recommendation})
 }
 
 func contains(values []string, target string) bool {

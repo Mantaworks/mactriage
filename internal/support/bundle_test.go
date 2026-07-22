@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/Mantaworks/mactriage/internal/report"
@@ -42,5 +43,18 @@ func TestWriteBundleContainsOnlySanitizedDeclaredFiles(t *testing.T) {
 	sort.Strings(names)
 	if !reflect.DeepEqual(names, manifest.Files) {
 		t.Fatalf("archive files=%v manifest=%v", names, manifest.Files)
+	}
+}
+
+func TestMarkdownSummaryRedactsHomeAndControlCharacters(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := report.New("doctor", filepath.Join(home, "Applications", "Private.app")+"\x00")
+	r.Findings = append(r.Findings, report.Finding{Code: "doctor.storage_low", Severity: report.Warning, Title: "Low disk", Explanation: "Needs attention\x1b[31m", Confidence: report.ConfidenceHigh})
+	markdown := support.MarkdownSummary(r)
+	if strings.Contains(markdown, home) || strings.Contains(markdown, "\x00") || strings.Contains(markdown, "\x1b") || !strings.Contains(markdown, "~/Applications/Private.app") {
+		t.Fatalf("summary was not sanitized: %q", markdown)
 	}
 }

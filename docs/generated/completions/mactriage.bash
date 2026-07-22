@@ -360,6 +360,254 @@ __mactriage_handle_word()
     __mactriage_handle_word
 }
 
+_mactriage_baseline_compare()
+{
+    last_command="mactriage_baseline_compare"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
+    flags+=("--only=")
+    two_word_flags+=("--only")
+    local_nonpersistent_flags+=("--only")
+    local_nonpersistent_flags+=("--only=")
+    flags+=("--skip=")
+    two_word_flags+=("--skip")
+    local_nonpersistent_flags+=("--skip")
+    local_nonpersistent_flags+=("--skip=")
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_mactriage_baseline_delete()
+{
+    last_command="mactriage_baseline_delete"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
+    flags+=("--yes")
+    local_nonpersistent_flags+=("--yes")
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_mactriage_baseline_help()
+{
+    last_command="mactriage_baseline_help"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    has_completion_function=1
+    noun_aliases=()
+}
+
+_mactriage_baseline_list()
+{
+    last_command="mactriage_baseline_list"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_mactriage_baseline_save()
+{
+    last_command="mactriage_baseline_save"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
+    flags+=("--only=")
+    two_word_flags+=("--only")
+    local_nonpersistent_flags+=("--only")
+    local_nonpersistent_flags+=("--only=")
+    flags+=("--skip=")
+    two_word_flags+=("--skip")
+    local_nonpersistent_flags+=("--skip")
+    local_nonpersistent_flags+=("--skip=")
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_mactriage_baseline()
+{
+    last_command="mactriage_baseline"
+
+    command_aliases=()
+
+    commands=()
+    commands+=("compare")
+    commands+=("delete")
+    commands+=("help")
+    commands+=("list")
+    commands+=("save")
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _mactriage_collect()
 {
     last_command="mactriage_collect"
@@ -536,6 +784,58 @@ _mactriage_diagnose()
     noun_aliases=()
 }
 
+_mactriage_doctor()
+{
+    last_command="mactriage_doctor"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--fix")
+    local_nonpersistent_flags+=("--fix")
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
+    flags+=("--only=")
+    two_word_flags+=("--only")
+    local_nonpersistent_flags+=("--only")
+    local_nonpersistent_flags+=("--only=")
+    flags+=("--severity=")
+    two_word_flags+=("--severity")
+    local_nonpersistent_flags+=("--severity")
+    local_nonpersistent_flags+=("--severity=")
+    flags+=("--skip=")
+    two_word_flags+=("--skip")
+    local_nonpersistent_flags+=("--skip")
+    local_nonpersistent_flags+=("--skip=")
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _mactriage_explain()
 {
     last_command="mactriage_explain"
@@ -659,6 +959,44 @@ _mactriage_help()
     noun_aliases=()
 }
 
+_mactriage_network()
+{
+    last_command="mactriage_network"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
 _mactriage_permissions()
 {
     last_command="mactriage_permissions"
@@ -681,6 +1019,48 @@ _mactriage_permissions()
     two_word_flags+=("--lookback")
     local_nonpersistent_flags+=("--lookback")
     local_nonpersistent_flags+=("--lookback=")
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_mactriage_relaunch()
+{
+    last_command="mactriage_relaunch"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
+    flags+=("--observe=")
+    two_word_flags+=("--observe")
+    local_nonpersistent_flags+=("--observe")
+    local_nonpersistent_flags+=("--observe=")
     flags+=("--accessible")
     flags+=("--animation=")
     two_word_flags+=("--animation")
@@ -842,6 +1222,46 @@ _mactriage_scan()
     two_word_flags+=("--workers")
     local_nonpersistent_flags+=("--workers")
     local_nonpersistent_flags+=("--workers=")
+    flags+=("--accessible")
+    flags+=("--animation=")
+    two_word_flags+=("--animation")
+    flags+=("--color=")
+    two_word_flags+=("--color")
+    flags+=("--json")
+    flags+=("--output=")
+    two_word_flags+=("--output")
+    two_word_flags+=("-o")
+    flags+=("--plain")
+    flags+=("--timeout=")
+    two_word_flags+=("--timeout")
+    flags+=("--verbose")
+    flags+=("-v")
+
+    must_have_one_flag=()
+    must_have_one_noun=()
+    noun_aliases=()
+}
+
+_mactriage_share()
+{
+    last_command="mactriage_share"
+
+    command_aliases=()
+
+    commands=()
+
+    flags=()
+    two_word_flags=()
+    local_nonpersistent_flags=()
+    flags_with_completion=()
+    flags_completion=()
+
+    flags+=("--copy")
+    local_nonpersistent_flags+=("--copy")
+    flags+=("--help")
+    flags+=("-h")
+    local_nonpersistent_flags+=("--help")
+    local_nonpersistent_flags+=("-h")
     flags+=("--accessible")
     flags+=("--animation=")
     two_word_flags+=("--animation")
@@ -1063,16 +1483,21 @@ _mactriage_root_command()
     command_aliases=()
 
     commands=()
+    commands+=("baseline")
     commands+=("collect")
     commands+=("compare")
     commands+=("completion")
     commands+=("diagnose")
+    commands+=("doctor")
     commands+=("explain")
     commands+=("hang")
     commands+=("help")
+    commands+=("network")
     commands+=("permissions")
+    commands+=("relaunch")
     commands+=("repair")
     commands+=("scan")
+    commands+=("share")
     commands+=("summarize")
     commands+=("system")
     commands+=("version")
