@@ -1,0 +1,59 @@
+.nh
+.TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
+
+.SH NAME
+mactriage-system - Inspect descriptor limits and system-wide pressure
+
+
+.SH SYNOPSIS
+\fBmactriage system [flags]\fP
+
+
+.SH DESCRIPTION
+Inspect descriptor limits and system-wide pressure
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for system
+
+.PP
+\fB--top\fP=0
+	include the N largest descriptor consumers (requires administrator access)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--accessible\fP[=false]
+	use screen-reader-friendly prompts and static progress
+
+.PP
+\fB--animation\fP="auto"
+	animation mode: auto, always, or never
+
+.PP
+\fB--color\fP="auto"
+	color mode: auto, always, or never
+
+.PP
+\fB--json\fP[=false]
+	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB-o\fP, \fB--output\fP=""
+	also write a sanitized JSON report to PATH
+
+.PP
+\fB--plain\fP[=false]
+	disable color, animation, and terminal UI control sequences
+
+.PP
+\fB--timeout\fP=15s
+	timeout for each macOS evidence command
+
+.PP
+\fB-v\fP, \fB--verbose\fP[=false]
+	show the macOS commands being run on stderr
+
+
+.SH SEE ALSO
+\fBmactriage(1)\fP

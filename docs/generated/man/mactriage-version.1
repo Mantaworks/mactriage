@@ -1,0 +1,55 @@
+.nh
+.TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
+
+.SH NAME
+mactriage-version - Print version and build information
+
+
+.SH SYNOPSIS
+\fBmactriage version [flags]\fP
+
+
+.SH DESCRIPTION
+Print version and build information
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for version
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--accessible\fP[=false]
+	use screen-reader-friendly prompts and static progress
+
+.PP
+\fB--animation\fP="auto"
+	animation mode: auto, always, or never
+
+.PP
+\fB--color\fP="auto"
+	color mode: auto, always, or never
+
+.PP
+\fB--json\fP[=false]
+	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB-o\fP, \fB--output\fP=""
+	also write a sanitized JSON report to PATH
+
+.PP
+\fB--plain\fP[=false]
+	disable color, animation, and terminal UI control sequences
+
+.PP
+\fB--timeout\fP=15s
+	timeout for each macOS evidence command
+
+.PP
+\fB-v\fP, \fB--verbose\fP[=false]
+	show the macOS commands being run on stderr
+
+
+.SH SEE ALSO
+\fBmactriage(1)\fP

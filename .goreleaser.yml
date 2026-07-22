@@ -1,0 +1,81 @@
+version: 2
+
+project_name: mactriage
+
+before:
+  hooks:
+    - go mod tidy
+    - go run ./cmd/gen-docs docs/generated
+
+builds:
+  - id: mactriage
+    main: ./cmd/mactriage
+    binary: mactriage
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - arm64
+      - amd64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - mactriage
+      sign:
+        certificate: '{{.Env.MACOS_SIGN_P12}}'
+        password: '{{.Env.MACOS_SIGN_PASSWORD}}'
+      notarize:
+        issuer_id: '{{.Env.MACOS_NOTARY_ISSUER_ID}}'
+        key_id: '{{.Env.MACOS_NOTARY_KEY_ID}}'
+        key: '{{.Env.MACOS_NOTARY_KEY}}'
+        wait: true
+        timeout: 20m
+
+archives:
+  - id: release
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ if eq .Arch "amd64" }}x86_64{{ else }}{{ .Arch }}{{ end }}
+    files:
+      - LICENSE
+      - README.md
+      - src: docs/generated/man/*
+        dst: man
+      - src: docs/generated/completions/*
+        dst: completions
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+homebrew_casks:
+  - name: mactriage
+    repository:
+      owner: upsidedly
+      name: homebrew-tap
+      token: '{{ .Env.TAP_GITHUB_TOKEN }}'
+    homepage: https://github.com/upsidedly/mactriage
+    description: Diagnose macOS application launch failures
+    license: MIT
+    binaries:
+      - mactriage
+
+release:
+  prerelease: auto
