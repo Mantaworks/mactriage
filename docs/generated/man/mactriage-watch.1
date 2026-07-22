@@ -14,6 +14,10 @@ Watch a process for descriptor growth and resource errors
 
 
 .SH OPTIONS
+\fB--cpu-threshold\fP=80
+	warn at this process CPU percentage
+
+.PP
 \fB--duration\fP=0s
 	stop after this duration (zero runs until interrupted)
 
@@ -28,6 +32,22 @@ Watch a process for descriptor growth and resource errors
 .PP
 \fB--interval\fP=5s
 	sampling interval
+
+.PP
+\fB--memory-free-threshold\fP=10
+	warn when system free memory reaches this percentage
+
+.PP
+\fB--memory-threshold-mib\fP=4096
+	warn at this resident-memory size in MiB
+
+.PP
+\fB--sockets-threshold\fP=1000
+	warn at this socket count
+
+.PP
+\fB--threads-threshold\fP=500
+	warn at this thread count
 
 .PP
 \fB--warn-growth\fP=150
@@ -56,7 +76,7 @@ Watch a process for descriptor growth and resource errors
 
 .PP
 \fB-o\fP, \fB--output\fP=""
-	also write a sanitized JSON report to PATH
+	write the command's private report or artifact to PATH
 
 .PP
 \fB--plain\fP[=false]

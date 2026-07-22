@@ -2,24 +2,32 @@
 .TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
 
 .SH NAME
-mactriage-repair-syspolicyd - Restart syspolicyd and verify launchd relaunches it
+mactriage-hang - Inspect a frozen, slow, or resource-heavy application
 
 
 .SH SYNOPSIS
-\fBmactriage repair syspolicyd [flags]\fP
+\fBmactriage hang  [flags]\fP
 
 
 .SH DESCRIPTION
-Restart syspolicyd and verify launchd relaunches it
+Inspect a frozen, slow, or resource-heavy application
 
 
 .SH OPTIONS
-\fB-h\fP, \fB--help\fP[=false]
-	help for syspolicyd
+\fB--cpu-threshold\fP=80
+	warn at this process CPU percentage
 
 .PP
-\fB--yes\fP[=false]
-	confirm the explicit repair without an interactive prompt
+\fB-h\fP, \fB--help\fP[=false]
+	help for hang
+
+.PP
+\fB--memory-threshold-mib\fP=4096
+	warn at this resident-memory size in MiB
+
+.PP
+\fB--sample-output\fP=""
+	explicitly collect a private raw Apple process sample at PATH
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
@@ -56,4 +64,4 @@ Restart syspolicyd and verify launchd relaunches it
 
 
 .SH SEE ALSO
-\fBmactriage-repair(1)\fP
+\fBmactriage(1)\fP

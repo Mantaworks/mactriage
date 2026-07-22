@@ -43,7 +43,11 @@ func Human(w io.Writer, r report.Report, style Style) {
 	fmt.Fprintf(w, "Command: %s   Evidence: %d   Completeness: %s\n", r.Command, len(r.Evidence), strings.ToUpper(string(r.Completeness)))
 
 	if len(r.Findings) == 0 {
-		fmt.Fprintln(w, "\n"+decorate("OK", "10", true, style.Color)+"  No diagnostic problems were identified.")
+		if r.Completeness == report.Partial {
+			fmt.Fprintln(w, "\n"+decorate("INCONCLUSIVE", "11", true, style.Color)+"  Some evidence was unavailable, so mactriage cannot call this result healthy.")
+		} else {
+			fmt.Fprintln(w, "\n"+decorate("OK", "10", true, style.Color)+"  No diagnostic problems were identified.")
+		}
 	} else {
 		fmt.Fprintln(w, "\nFindings")
 		for _, finding := range sortedFindings(r.Findings) {

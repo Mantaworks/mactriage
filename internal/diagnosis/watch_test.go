@@ -25,3 +25,21 @@ func TestClassifyWatchReportsGrowthRate(t *testing.T) {
 		t.Fatalf("severity=%s message=%q", severity, message)
 	}
 }
+
+func TestClassifyWatchReportsBroaderResourcePressure(t *testing.T) {
+	severity, message := diagnosis.ClassifyWatch(diagnosis.WatchFacts{Resources: diagnosis.ResourceSample{CPUPercent: 95, MemoryFreePercent: 5}, Thresholds: diagnosis.ResourceThresholds{CPUPercent: 80, MinMemoryFree: 10}})
+	if severity != report.Warning || message == "" {
+		t.Fatalf("severity=%s message=%q", severity, message)
+	}
+}
+
+func TestClassifyRestartRequiresRepeatedRestartsForWarning(t *testing.T) {
+	severity, _ := diagnosis.ClassifyRestart(2, time.Minute)
+	if severity != report.Info {
+		t.Fatalf("two restarts severity=%s", severity)
+	}
+	severity, _ = diagnosis.ClassifyRestart(3, time.Minute)
+	if severity != report.Warning {
+		t.Fatalf("three restarts severity=%s", severity)
+	}
+}

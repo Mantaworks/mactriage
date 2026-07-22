@@ -2,7 +2,7 @@
 .TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
 
 .SH NAME
-mactriage - Explain why a macOS application will not launch
+mactriage - Guided macOS application troubleshooting
 
 
 .SH SYNOPSIS
@@ -10,7 +10,7 @@ mactriage - Explain why a macOS application will not launch
 
 
 .SH DESCRIPTION
-mactriage collects bounded macOS launch evidence, explains the likely cause, and offers only explicitly approved safe actions.
+mactriage collects bounded macOS application and resource evidence, explains the likely cause in plain language, and offers only explicitly approved safe actions.
 
 
 .SH OPTIONS
@@ -35,7 +35,7 @@ mactriage collects bounded macOS launch evidence, explains the likely cause, and
 
 .PP
 \fB-o\fP, \fB--output\fP=""
-	also write a sanitized JSON report to PATH
+	write the command's private report or artifact to PATH
 
 .PP
 \fB--plain\fP[=false]
@@ -51,4 +51,4 @@ mactriage collects bounded macOS launch evidence, explains the likely cause, and
 
 
 .SH SEE ALSO
-\fBmactriage-completion(1)\fP, \fBmactriage-diagnose(1)\fP, \fBmactriage-repair(1)\fP, \fBmactriage-system(1)\fP, \fBmactriage-version(1)\fP, \fBmactriage-watch(1)\fP
+\fBmactriage-collect(1)\fP, \fBmactriage-compare(1)\fP, \fBmactriage-completion(1)\fP, \fBmactriage-diagnose(1)\fP, \fBmactriage-explain(1)\fP, \fBmactriage-hang(1)\fP, \fBmactriage-permissions(1)\fP, \fBmactriage-repair(1)\fP, \fBmactriage-scan(1)\fP, \fBmactriage-summarize(1)\fP, \fBmactriage-system(1)\fP, \fBmactriage-version(1)\fP, \fBmactriage-watch(1)\fP

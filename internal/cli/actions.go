@@ -13,6 +13,20 @@ import (
 )
 
 func (a *application) offerActions(ctx context.Context, selected macos.App, opts macos.DiagnoseOptions, r report.Report) (*report.Report, error) {
+	return a.offerReportActions(ctx, selected.Path, r, func(mode action.RecheckMode) (*report.Report, error) {
+		switch mode {
+		case action.RecheckPassive:
+			opts.NoLaunch = true
+		case action.RecheckLaunch:
+			opts.NoLaunch = false
+		default:
+			return nil, nil
+		}
+		return a.recheckAndRender(ctx, selected.Path, opts)
+	})
+}
+
+func (a *application) offerReportActions(ctx context.Context, target string, r report.Report, recheck func(action.RecheckMode) (*report.Report, error)) (*report.Report, error) {
 	for _, available := range r.Actions {
 		description := available.Description
 		if len(available.Command) > 0 {
@@ -25,7 +39,7 @@ func (a *application) offerActions(ctx context.Context, selected macos.App, opts
 		if !approved {
 			continue
 		}
-		spec, ok := action.Lookup(available.ID, selected.Path)
+		spec, ok := action.Lookup(available.ID, target)
 		if !ok {
 			return nil, fmt.Errorf("action %q is not allowlisted", available.ID)
 		}
@@ -38,22 +52,17 @@ func (a *application) offerActions(ctx context.Context, selected macos.App, opts
 				return nil, fmt.Errorf("action %q exited with code %d: %w", available.ID, code, err)
 			}
 		} else if spec.Executable {
-			if _, err := (action.Executor{Runner: a.runner}).Execute(ctx, available.ID, selected.Path); err != nil {
+			if _, err := (action.Executor{Runner: a.runner}).Execute(ctx, available.ID, target); err != nil {
 				return nil, err
 			}
 		}
 		if spec.Completion != "" {
 			fmt.Fprintln(a.config.Err, "\n"+spec.Completion)
 		}
-		switch spec.Recheck {
-		case action.RecheckPassive:
-			opts.NoLaunch = true
-		case action.RecheckLaunch:
-			opts.NoLaunch = false
-		default:
+		if spec.Recheck == action.RecheckNone || recheck == nil {
 			continue
 		}
-		return a.recheckAndRender(ctx, selected.Path, opts)
+		return recheck(spec.Recheck)
 	}
 	return nil, nil
 }

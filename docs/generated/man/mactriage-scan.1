@@ -2,24 +2,28 @@
 .TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
 
 .SH NAME
-mactriage-repair-syspolicyd - Restart syspolicyd and verify launchd relaunches it
+mactriage-scan - Check installed applications for compatibility and integrity problems
 
 
 .SH SYNOPSIS
-\fBmactriage repair syspolicyd [flags]\fP
+\fBmactriage scan [directory] [flags]\fP
 
 
 .SH DESCRIPTION
-Restart syspolicyd and verify launchd relaunches it
+Check installed applications for compatibility and integrity problems
 
 
 .SH OPTIONS
 \fB-h\fP, \fB--help\fP[=false]
-	help for syspolicyd
+	help for scan
 
 .PP
-\fB--yes\fP[=false]
-	confirm the explicit repair without an interactive prompt
+\fB--limit\fP=250
+	maximum applications to inspect
+
+.PP
+\fB--workers\fP=6
+	concurrent application inspections
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
@@ -56,4 +60,4 @@ Restart syspolicyd and verify launchd relaunches it
 
 
 .SH SEE ALSO
-\fBmactriage-repair(1)\fP
+\fBmactriage(1)\fP

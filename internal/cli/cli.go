@@ -57,10 +57,31 @@ func New(config Config) *cobra.Command {
 	app := &application{config: config}
 	root := &cobra.Command{
 		Use:           "mactriage",
-		Short:         "Explain why a macOS application will not launch",
-		Long:          "mactriage collects bounded macOS launch evidence, explains the likely cause, and offers only explicitly approved safe actions.",
+		Short:         "Guided macOS application troubleshooting",
+		Long:          "mactriage collects bounded macOS application and resource evidence, explains the likely cause in plain language, and offers only explicitly approved safe actions.",
 		SilenceErrors: true,
 		SilenceUsage:  true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if !app.canPrompt() {
+				present.GettingStarted(app.config.Out, app.color())
+				return nil
+			}
+			present.GettingStarted(app.config.Err, app.color())
+			choice, err := present.Home(app.opts.accessible || app.opts.plain)
+			if err != nil {
+				return err
+			}
+			selected := New(app.config)
+			selected.SetArgs(homeArgs(app.opts, choice))
+			if err := selected.ExecuteContext(cmd.Context()); err != nil {
+				return err
+			}
+			if code, ok := selected.Annotations["exit_code"]; ok {
+				parsed, _ := strconv.Atoi(code)
+				app.setExit(cmd, parsed)
+			}
+			return nil
+		},
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			return app.prepare()
 		},
@@ -69,7 +90,7 @@ func New(config Config) *cobra.Command {
 	root.SetErr(config.Err)
 	flags := root.PersistentFlags()
 	flags.BoolVar(&app.opts.json, "json", false, "emit versioned JSON (NDJSON for watch)")
-	flags.StringVarP(&app.opts.output, "output", "o", "", "also write a sanitized JSON report to PATH")
+	flags.StringVarP(&app.opts.output, "output", "o", "", "write the command's private report or artifact to PATH")
 	flags.BoolVarP(&app.opts.verbose, "verbose", "v", false, "show the macOS commands being run on stderr")
 	flags.BoolVar(&app.opts.plain, "plain", false, "disable color, animation, and terminal UI control sequences")
 	flags.BoolVar(&app.opts.accessible, "accessible", false, "use screen-reader-friendly prompts and static progress")
@@ -77,7 +98,7 @@ func New(config Config) *cobra.Command {
 	flags.StringVar(&app.opts.animation, "animation", "auto", "animation mode: auto, always, or never")
 	flags.DurationVar(&app.opts.timeout, "timeout", 15*time.Second, "timeout for each macOS evidence command")
 
-	root.AddCommand(app.diagnoseCommand(), app.systemCommand(), app.watchCommand(), app.repairCommand(), app.completionCommand(root), app.versionCommand())
+	root.AddCommand(app.diagnoseCommand(), app.collectCommand(), app.hangCommand(), app.permissionsCommand(), app.scanCommand(), app.compareCommand(), app.explainCommand(), app.summarizeCommand(), app.systemCommand(), app.watchCommand(), app.repairCommand(), app.completionCommand(root), app.versionCommand())
 	return root
 }
 
@@ -339,6 +360,8 @@ func (a *application) watchCommand() *cobra.Command {
 	var interval, window, duration time.Duration
 	var warnGrowth int
 	var includePaths bool
+	var thresholds diagnosis.ResourceThresholds
+	var memoryThresholdMiB uint64
 	cmd := &cobra.Command{
 		Use:   "watch [process-or-pid]",
 		Short: "Watch a process for descriptor growth and resource errors",
@@ -358,7 +381,8 @@ func (a *application) watchCommand() *cobra.Command {
 					return nil
 				}
 			}
-			if interval < 250*time.Millisecond || window < interval || warnGrowth < 1 || duration < 0 {
+			thresholds.MemoryBytes = memoryThresholdMiB << 20
+			if interval < 250*time.Millisecond || window < interval || warnGrowth < 1 || duration < 0 || thresholds.CPUPercent <= 0 || memoryThresholdMiB == 0 || thresholds.MinMemoryFree <= 0 || thresholds.MinMemoryFree > 100 || thresholds.Threads < 1 || thresholds.Sockets < 1 {
 				return errors.New("watch requires interval >= 250ms, window >= interval, positive warning growth, and non-negative duration")
 			}
 			watcher := macos.Watcher{Runner: a.runner}
@@ -381,6 +405,13 @@ func (a *application) watchCommand() *cobra.Command {
 					return present.NDJSON(a.config.Out, event)
 				}
 				message := fmt.Sprintf("PID %d · %d descriptors · Δ%d (%.1f/s) · %s", event.PID, event.DescriptorCount, event.Growth, event.GrowthRate, event.Message)
+				message += fmt.Sprintf(" · CPU %.1f%% · memory %d MiB · threads %d · sockets %d", event.CPUPercent, event.RSSBytes>>20, event.Threads, event.SocketCount)
+				if event.MemoryFreePercent > 0 {
+					message += fmt.Sprintf(" · system memory %.0f%% free", event.MemoryFreePercent)
+				}
+				if event.DiskReadBytes > 0 || event.DiskWriteBytes > 0 {
+					message += fmt.Sprintf(" · disk read %d MiB/write %d MiB", event.DiskReadBytes>>20, event.DiskWriteBytes>>20)
+				}
 				if types := summarizeCounts(event.ByType, 4); types != "" {
 					message += " · types " + types
 				}
@@ -390,7 +421,7 @@ func (a *application) watchCommand() *cobra.Command {
 				present.HumanWatch(a.config.Out, event.Timestamp.Local().Format("15:04:05"), event.Severity, message, a.color())
 				return nil
 			}
-			err = watcher.Run(cmd.Context(), macos.WatchOptions{Target: target, Interval: interval, Window: window, WarnGrowth: warnGrowth, Duration: duration, IncludePaths: includePaths}, emit)
+			err = watcher.Run(cmd.Context(), macos.WatchOptions{Target: target, Interval: interval, Window: window, WarnGrowth: warnGrowth, Duration: duration, IncludePaths: includePaths, Thresholds: thresholds}, emit)
 			if stream != nil {
 				if commitErr := stream.Commit(); commitErr != nil && err == nil {
 					err = commitErr
@@ -412,6 +443,11 @@ func (a *application) watchCommand() *cobra.Command {
 	cmd.Flags().IntVar(&warnGrowth, "warn-growth", 150, "warn after this many additional descriptors within the window")
 	cmd.Flags().DurationVar(&duration, "duration", 0, "stop after this duration (zero runs until interrupted)")
 	cmd.Flags().BoolVar(&includePaths, "include-paths", false, "include target-process path aggregation in watch events")
+	cmd.Flags().Float64Var(&thresholds.CPUPercent, "cpu-threshold", 80, "warn at this process CPU percentage")
+	cmd.Flags().Uint64Var(&memoryThresholdMiB, "memory-threshold-mib", 4096, "warn at this resident-memory size in MiB")
+	cmd.Flags().Float64Var(&thresholds.MinMemoryFree, "memory-free-threshold", 10, "warn when system free memory reaches this percentage")
+	cmd.Flags().IntVar(&thresholds.Threads, "threads-threshold", 500, "warn at this thread count")
+	cmd.Flags().IntVar(&thresholds.Sockets, "sockets-threshold", 1000, "warn at this socket count")
 	return cmd
 }
 
@@ -527,6 +563,10 @@ func (a *application) renderReport(r report.Report) error {
 			return fmt.Errorf("write report: %w", err)
 		}
 	}
+	return a.renderReportOnly(r)
+}
+
+func (a *application) renderReportOnly(r report.Report) error {
 	if a.opts.json {
 		return present.JSON(a.config.Out, r)
 	}

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Mantaworks/mactriage/internal/knowledge"
 	"github.com/Mantaworks/mactriage/internal/platform"
 )
 
@@ -130,7 +131,7 @@ func (r Resolver) Resolve(ctx context.Context, input string) ([]App, error) {
 		sortApps(fuzzy, roots)
 		return fuzzy, nil
 	}
-	return nil, &ResolveError{Code: "app.not_found", Input: input, Err: fmt.Errorf("application %q was not found", input)}
+	return nil, &ResolveError{Code: knowledge.CodeAppNotFound, Input: input, Err: fmt.Errorf("application %q was not found", input)}
 }
 
 func (r Resolver) matchingApps(ctx context.Context, paths []string, input, name string) (exact, fuzzy []App) {
@@ -149,9 +150,9 @@ func (r Resolver) matchingApps(ctx context.Context, paths []string, input, name 
 }
 
 func classifyResolveError(input string, err error) error {
-	code := "bundle.invalid"
+	code := knowledge.CodeBundleInvalid
 	if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "does not exist") {
-		code = "app.not_found"
+		code = knowledge.CodeAppNotFound
 	}
 	return &ResolveError{Code: code, Input: input, Err: err}
 }

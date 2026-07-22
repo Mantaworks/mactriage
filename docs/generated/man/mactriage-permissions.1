@@ -2,24 +2,24 @@
 .TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
 
 .SH NAME
-mactriage-repair-syspolicyd - Restart syspolicyd and verify launchd relaunches it
+mactriage-permissions - Explain macOS privacy permission denials
 
 
 .SH SYNOPSIS
-\fBmactriage repair syspolicyd [flags]\fP
+\fBmactriage permissions  [flags]\fP
 
 
 .SH DESCRIPTION
-Restart syspolicyd and verify launchd relaunches it
+Explain macOS privacy permission denials
 
 
 .SH OPTIONS
 \fB-h\fP, \fB--help\fP[=false]
-	help for syspolicyd
+	help for permissions
 
 .PP
-\fB--yes\fP[=false]
-	confirm the explicit repair without an interactive prompt
+\fB--lookback\fP=10m0s
+	privacy-log lookback window
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
@@ -56,4 +56,4 @@ Restart syspolicyd and verify launchd relaunches it
 
 
 .SH SEE ALSO
-\fBmactriage-repair(1)\fP
+\fBmactriage(1)\fP
