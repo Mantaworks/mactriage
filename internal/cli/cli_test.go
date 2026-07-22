@@ -21,10 +21,144 @@ func TestHelpExposesApprovedCommandSurface(t *testing.T) {
 		t.Fatalf("ExecuteContext returned error: %v", err)
 	}
 	help := out.String()
-	for _, command := range []string{"diagnose", "collect", "hang", "permissions", "scan", "compare", "explain", "summarize", "system", "watch", "repair", "completion", "version"} {
+	for _, command := range []string{"doctor", "network", "relaunch", "baseline", "share", "diagnose", "collect", "hang", "permissions", "scan", "compare", "explain", "summarize", "system", "watch", "repair", "completion", "version"} {
 		if !strings.Contains(help, command) {
 			t.Fatalf("help missing %q:\n%s", command, help)
 		}
+	}
+}
+
+func TestShareCreatesSanitizedMarkdownWithoutCopyingNoninteractively(t *testing.T) {
+	dir := t.TempDir()
+	reportPath := filepath.Join(dir, "report.json")
+	contents := `{"schema_version":"1","command":"doctor","target":"this Mac","host":{"os_version":"14.5","arch":"arm64"},"completeness":"complete","evidence":[],"findings":[{"code":"doctor.storage_low","severity":"warning","title":"Low disk","explanation":"Free space","confidence":"high"}],"actions":[]}`
+	if err := os.WriteFile(reportPath, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outputPath := filepath.Join(dir, "share.md")
+	var out, errOut bytes.Buffer
+	code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: systemRunner{}}, []string{"--json", "--output", outputPath, "share", reportPath, "--copy"})
+	if code != 0 || !strings.Contains(out.String(), `"copy_available":true`) || !strings.Contains(out.String(), `# mactriage summary`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+	markdown, err := os.ReadFile(outputPath)
+	if err != nil || !strings.Contains(string(markdown), "doctor.storage_low") {
+		t.Fatalf("output=%q error=%v", markdown, err)
+	}
+	if info, err := os.Stat(outputPath); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("share mode/error=%v %v", info.Mode().Perm(), err)
+	}
+}
+
+func TestBaselineCommandsManagePrivateDoctorSnapshots(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "baselines")
+	config := cli.Config{Runner: doctorCLIRunner{}, BaselineDir: dir}
+	var saveOut, saveErr bytes.Buffer
+	config.Out, config.Err = &saveOut, &saveErr
+	if code := cli.Execute(context.Background(), config, []string{"--json", "baseline", "save", "morning", "--only", "storage"}); code != 1 {
+		t.Fatalf("save code=%d stdout=%q stderr=%q", code, saveOut.String(), saveErr.String())
+	}
+	path := filepath.Join(dir, "morning.json")
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("baseline mode/error=%v %v", info.Mode().Perm(), err)
+	}
+	var listOut, listErr bytes.Buffer
+	config.Out, config.Err = &listOut, &listErr
+	if code := cli.Execute(context.Background(), config, []string{"--json", "baseline", "list"}); code != 0 || !strings.Contains(listOut.String(), `"name":"morning"`) {
+		t.Fatalf("list code=%d stdout=%q stderr=%q", code, listOut.String(), listErr.String())
+	}
+	var deleteOut, deleteErr bytes.Buffer
+	config.Out, config.Err = &deleteOut, &deleteErr
+	if code := cli.Execute(context.Background(), config, []string{"--json", "baseline", "delete", "morning", "--yes"}); code != 0 || !strings.Contains(deleteOut.String(), `"deleted":"morning"`) {
+		t.Fatalf("delete code=%d stdout=%q stderr=%q", code, deleteOut.String(), deleteErr.String())
+	}
+}
+
+func TestDoctorSupportsCheckAndSeverityFiltersInJSON(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: doctorCLIRunner{}}, []string{"--json", "doctor", "--only", "storage", "--severity", "error"})
+	if code != 1 || !strings.Contains(out.String(), `"command": "doctor"`) || !strings.Contains(out.String(), `"code": "doctor.storage_low"`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+	if strings.Contains(out.String(), `"id": "memory"`) || strings.Contains(out.String(), `"severity": "warning"`) || strings.Contains(out.String()+errOut.String(), "\x1b[") {
+		t.Fatalf("filters or JSON purity failed: stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+}
+
+type doctorCLIRunner struct{ systemRunner }
+
+func (doctorCLIRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	if path == "/bin/df" {
+		return platform.Result{Stdout: "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk 1000000 950000 50000 95% /\n"}
+	}
+	return (systemRunner{}).Run(ctx, path, args...)
+}
+
+func TestNetworkCommandUsesSafeDefaultAndStructuredOutput(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: networkCLIRunner{}}, []string{"--json", "network"})
+	if code != 0 || !strings.Contains(out.String(), `"command": "network"`) || !strings.Contains(out.String(), `"target": "example.com"`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+	if strings.Contains(out.String()+errOut.String(), "93.184.216.34") || strings.Contains(out.String()+errOut.String(), "\x1b[") {
+		t.Fatalf("network output leaked raw facts or ANSI: stdout=%q stderr=%q", out.String(), errOut.String())
+	}
+}
+
+type networkCLIRunner struct{ systemRunner }
+
+func (networkCLIRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	switch path {
+	case "/usr/bin/dscacheutil":
+		return platform.Result{Stdout: "name: example.com\nip_address: 93.184.216.34\n"}
+	case "/sbin/route":
+		return platform.Result{Stdout: "gateway: 192.0.2.1\n"}
+	case "/usr/sbin/scutil":
+		return platform.Result{Stdout: "<dictionary> {}\n"}
+	case "/sbin/ifconfig":
+		return platform.Result{Stdout: "lo0 en0\n"}
+	case "/usr/bin/curl":
+		return platform.Result{}
+	case "/usr/sbin/lsof":
+		return platform.Result{}
+	default:
+		return (systemRunner{}).Run(ctx, path, args...)
+	}
+}
+
+func TestNoninteractiveRelaunchExplainsActionWithoutMutation(t *testing.T) {
+	root := t.TempDir()
+	appPath := filepath.Join(root, "Example.app")
+	if err := os.MkdirAll(filepath.Join(appPath, "Contents", "MacOS"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &relaunchCLIRunner{}
+	var out, errOut bytes.Buffer
+	code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: runner}, []string{"--json", "relaunch", appPath})
+	if code != 0 || !strings.Contains(out.String(), `"id": "relaunch.app"`) || !strings.Contains(out.String(), `"pids": [`) {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+	if runner.mutations != 0 {
+		t.Fatalf("noninteractive relaunch performed %d mutations", runner.mutations)
+	}
+}
+
+type relaunchCLIRunner struct {
+	systemRunner
+	mutations int
+}
+
+func (r *relaunchCLIRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	switch path {
+	case "/usr/bin/plutil":
+		return platform.Result{Stdout: `{"CFBundleName":"Example","CFBundleIdentifier":"com.example.App","CFBundleExecutable":"Example"}`}
+	case "/usr/bin/pgrep":
+		return platform.Result{Stdout: "42\n"}
+	case "/bin/kill", "/usr/bin/open":
+		r.mutations++
+		return platform.Result{}
+	default:
+		return (systemRunner{}).Run(ctx, path, args...)
 	}
 }
 

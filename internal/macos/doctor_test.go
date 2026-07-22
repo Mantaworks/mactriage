@@ -1,0 +1,99 @@
+package macos_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/Mantaworks/mactriage/internal/macos"
+	"github.com/Mantaworks/mactriage/internal/platform"
+	"github.com/Mantaworks/mactriage/internal/report"
+)
+
+func TestDoctorCollectsTypedMacHealthEvidence(t *testing.T) {
+	r, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Skip: []string{"apps", "network"}})
+	if err != nil {
+		t.Fatalf("Inspect returned error: %v", err)
+	}
+	if r.Command != "doctor" || len(r.Evidence) < 7 {
+		t.Fatalf("incomplete doctor report: %#v", r)
+	}
+	storage := evidenceData[report.StorageData](t, r, report.EvidenceStorage)
+	if storage.AvailablePercent != 5 {
+		t.Fatalf("available percent=%v want=5", storage.AvailablePercent)
+	}
+	memory := evidenceData[report.MemoryData](t, r, report.EvidenceMemory)
+	if memory.SwapUsedBytes != 2<<30 || memory.FreePercent != 4 {
+		t.Fatalf("unexpected memory facts: %#v", memory)
+	}
+	restarts := evidenceData[report.RestartLoopsData](t, r, report.EvidenceRestartLoops)
+	if len(restarts.Processes) != 1 || restarts.Processes[0].Name != "com.example.Helper" || restarts.Processes[0].Count != 3 {
+		t.Fatalf("unexpected restart facts: %#v", restarts)
+	}
+}
+
+func TestDoctorOnlyCollectsSelectedChecks(t *testing.T) {
+	r, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Only: []string{"storage"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Evidence) != 1 || r.Evidence[0].ID != report.EvidenceStorage {
+		t.Fatalf("evidence=%#v", r.Evidence)
+	}
+}
+
+func evidenceData[T any](t *testing.T, r report.Report, id report.EvidenceID) T {
+	t.Helper()
+	for _, evidence := range r.Evidence {
+		if evidence.ID == id {
+			value, ok := evidence.Data.(T)
+			if !ok {
+				t.Fatalf("evidence %s data=%T", id, evidence.Data)
+			}
+			return value
+		}
+	}
+	var zero T
+	t.Fatalf("evidence %s not found", id)
+	return zero
+}
+
+type doctorRunner struct{}
+
+func (doctorRunner) Run(_ context.Context, path string, args ...string) platform.Result {
+	switch path {
+	case "/bin/df":
+		return platform.Result{Stdout: "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/disk 1000000 950000 50000 95% /\n"}
+	case "/usr/bin/vm_stat":
+		return platform.Result{Stdout: "Mach Virtual Memory Statistics: (page size of 4096 bytes)\nPages free: 1024.\nPages inactive: 0.\nPages speculative: 0.\n"}
+	case "/usr/sbin/sysctl":
+		if len(args) > 1 && args[1] == "hw.memsize" {
+			return platform.Result{Stdout: "104857600\n"}
+		}
+		if len(args) > 1 && args[1] == "vm.swapusage" {
+			return platform.Result{Stdout: "total = 4096.00M used = 2048.00M free = 2048.00M\n"}
+		}
+		return platform.Result{Stdout: "4\n"}
+	case "/usr/bin/uptime":
+		return platform.Result{Stdout: "load averages: 8.00 4.00 2.00\n"}
+	case "/bin/ps":
+		return platform.Result{Stdout: "  PID %CPU STAT COMM\n  42 99.0 R Example\n"}
+	case "/usr/bin/pgrep":
+		return platform.Result{Stdout: "42\n"}
+	case "/usr/sbin/softwareupdate":
+		return platform.Result{Stdout: "No new software available.\n"}
+	case "/usr/bin/find":
+		return platform.Result{Stdout: "one.ips\ntwo.ips\n"}
+	case "/bin/ls":
+		return platform.Result{Stdout: "one.plist\ntwo.plist\n"}
+	case "/usr/bin/sfltool":
+		return platform.Result{Stdout: "UUID: one\nUUID: two\n"}
+	case "/usr/bin/log":
+		return platform.Result{Stdout: "{\"eventMessage\":\"service com.example.Helper exited\"}\n{\"eventMessage\":\"service com.example.Helper exited\"}\n{\"eventMessage\":\"service com.example.Helper exited\"}\n"}
+	case "/usr/bin/sw_vers":
+		return platform.Result{Stdout: "14.5\n"}
+	case "/usr/bin/uname":
+		return platform.Result{Stdout: "arm64\n"}
+	default:
+		return platform.Result{}
+	}
+}

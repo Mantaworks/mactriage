@@ -40,3 +40,25 @@ func TestLoadReadsSanitizedReportWithoutConcreteEvidencePayloads(t *testing.T) {
 		t.Fatalf("loaded=%#v", loaded)
 	}
 }
+
+func TestCompareReportsHealthMetricsAndNewIntelOnlyApps(t *testing.T) {
+	before := report.New("doctor", "this Mac")
+	before.Host.Arch = "arm64"
+	before.Evidence = []report.Evidence{
+		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 40}},
+		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{SwapUsedBytes: 1 << 30}},
+		{ID: report.EvidenceScan, Status: report.StatusOK, Data: report.ScanData{Apps: []report.ScannedApp{{Name: "Example", Architectures: []string{"arm64"}}}}},
+	}
+	after := report.New("doctor", "this Mac")
+	after.Host.Arch = "arm64"
+	after.Evidence = []report.Evidence{
+		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 20}},
+		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{SwapUsedBytes: 3 << 30}},
+		{ID: report.EvidenceScan, Status: report.StatusOK, Data: report.ScanData{Apps: []report.ScannedApp{{Name: "Example", Architectures: []string{"x86_64"}}}}},
+	}
+
+	comparison := reportutil.Compare(before, after)
+	if len(comparison.MetricChanges) < 2 || len(comparison.NewIntelOnly) != 1 || comparison.NewIntelOnly[0] != "Example" {
+		t.Fatalf("comparison=%#v", comparison)
+	}
+}

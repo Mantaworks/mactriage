@@ -1,0 +1,71 @@
+.nh
+.TH "MACTRIAGE" "1" "Dec 1969" "mactriage" "mactriage Manual"
+
+.SH NAME
+mactriage-doctor - Run a guided whole-Mac health check
+
+
+.SH SYNOPSIS
+\fBmactriage doctor [flags]\fP
+
+
+.SH DESCRIPTION
+Run a guided whole-Mac health check
+
+
+.SH OPTIONS
+\fB--fix\fP[=false]
+	interactively offer eligible safe actions (each still requires confirmation)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for doctor
+
+.PP
+\fB--only\fP=[]
+	run only these checks: storage,memory,cpu,descriptors,services,updates,crashes,restarts,startup,apps,network
+
+.PP
+\fB--severity\fP="info"
+	minimum finding severity: info, warning, error, or critical
+
+.PP
+\fB--skip\fP=[]
+	skip these checks: storage,memory,cpu,descriptors,services,updates,crashes,restarts,startup,apps,network
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--accessible\fP[=false]
+	use screen-reader-friendly prompts and static progress
+
+.PP
+\fB--animation\fP="auto"
+	animation mode: auto, always, or never
+
+.PP
+\fB--color\fP="auto"
+	color mode: auto, always, or never
+
+.PP
+\fB--json\fP[=false]
+	emit versioned JSON (NDJSON for watch)
+
+.PP
+\fB-o\fP, \fB--output\fP=""
+	write the command's private report or artifact to PATH
+
+.PP
+\fB--plain\fP[=false]
+	disable color, animation, and terminal UI control sequences
+
+.PP
+\fB--timeout\fP=15s
+	timeout for each macOS evidence command
+
+.PP
+\fB-v\fP, \fB--verbose\fP[=false]
+	show the macOS commands being run on stderr
+
+
+.SH SEE ALSO
+\fBmactriage(1)\fP

@@ -45,6 +45,24 @@ const (
 	CodeScanSignatureInvalid        = "scan.signature_invalid"
 	CodeScanOSUnsupported           = "scan.os_unsupported"
 	CodeScanIntelOnly               = "scan.intel_only"
+	CodeDoctorStorageLow            = "doctor.storage_low"
+	CodeDoctorMemoryPressure        = "doctor.memory_pressure"
+	CodeDoctorCPUPressure           = "doctor.cpu_pressure"
+	CodeDoctorProcessStalled        = "doctor.process_stalled"
+	CodeDoctorServiceMissing        = "doctor.service_missing"
+	CodeDoctorUpdatesAvailable      = "doctor.updates_available"
+	CodeDoctorCrashVolume           = "doctor.crash_volume"
+	CodeDoctorStartupItemsHigh      = "doctor.startup_items_high"
+	CodeDoctorRestartLoop           = "doctor.restart_loop"
+	CodeDoctorDescriptorPressure    = "doctor.descriptor_pressure"
+	CodeNetworkDNSFailed            = "network.dns_failed"
+	CodeNetworkNoRoute              = "network.no_default_route"
+	CodeNetworkHTTPSFailed          = "network.https_failed"
+	CodeNetworkTLSInvalid           = "network.tls_invalid"
+	CodeNetworkProxyDetected        = "network.proxy_detected"
+	CodeNetworkVPNDetected          = "network.vpn_detected"
+	CodeNetworkListenersHigh        = "network.listeners_high"
+	CodeRelaunchFailed              = "relaunch.failed"
 )
 
 var entries = map[string]Entry{
@@ -84,6 +102,24 @@ var entries = map[string]Entry{
 	CodeScanSignatureInvalid:        entry("Invalid installed application signatures", "One or more scanned applications failed strict recursive signature verification.", "Replace affected applications with trusted publisher-provided copies."),
 	CodeScanOSUnsupported:           entry("Applications require newer macOS", "One or more scanned applications declare a minimum macOS version newer than this Mac.", "Update macOS or install compatible application versions."),
 	CodeScanIntelOnly:               entry("Intel-only installed applications", "One or more scanned applications require Rosetta on Apple silicon.", "Check their publishers for native Apple silicon updates."),
+	CodeDoctorStorageLow:            entry("Startup disk space is low", "The startup disk has too little free capacity for reliable updates, swap, and temporary files.", "Remove or move files you recognize, then rerun doctor."),
+	CodeDoctorMemoryPressure:        entry("Memory pressure is elevated", "Readily available memory is low or macOS is using substantial swap space.", "Close memory-heavy applications and check whether pressure falls."),
+	CodeDoctorCPUPressure:           entry("CPU pressure is elevated", "Current load or a single process is using unusually high CPU.", "Observe the named process and capture a sample if usage persists."),
+	CodeDoctorProcessStalled:        entry("A process may be stalled", "One or more processes are stopped, suspended, or waiting uninterruptibly.", "Use mactriage hang on the affected process before relaunching it."),
+	CodeDoctorServiceMissing:        entry("A macOS service is unavailable", "A core application or security service was not running when checked.", "Retry the check; restart only a service that mactriage explicitly confirms is wedged."),
+	CodeDoctorUpdatesAvailable:      entry("Software updates are available", "macOS reports one or more available software updates.", "Open Software Update, review the offered updates, and install them when convenient."),
+	CodeDoctorCrashVolume:           entry("Many recent crashes were found", "The Mac created an unusually high number of crash reports during the last day.", "Identify repeated application names and diagnose the affected app."),
+	CodeDoctorStartupItemsHigh:      entry("Many startup agents are installed", "A high number of user and system launch agents can contribute to login or background load.", "Review Login Items in System Settings; mactriage will not remove them."),
+	CodeDoctorRestartLoop:           entry("A process is repeatedly restarting", "macOS recorded the same process exiting at least three times within ten minutes.", "Diagnose or update the named process; do not repeatedly force-restart its parent service."),
+	CodeDoctorDescriptorPressure:    entry("System descriptor pressure is high", "The global macOS file table is above eighty percent of its configured capacity.", "Use mactriage system --top to identify aggregate descriptor consumers."),
+	CodeNetworkDNSFailed:            entry("DNS lookup failed", "The requested hostname did not resolve through the Mac's current DNS configuration.", "Check the hostname, VPN, DNS service, and network connection."),
+	CodeNetworkNoRoute:              entry("No default network route", "The Mac did not report a default route for internet traffic.", "Reconnect Wi-Fi or Ethernet and review VPN configuration."),
+	CodeNetworkHTTPSFailed:          entry("HTTPS connection failed", "mactriage could not establish an HTTPS connection to the target.", "Check connectivity, proxy, VPN, and firewall policy."),
+	CodeNetworkTLSInvalid:           entry("TLS certificate validation failed", "The host was reachable but its certificate could not be validated.", "Check the date, proxy or VPN interception, and the site's certificate; do not bypass validation."),
+	CodeNetworkProxyDetected:        entry("Network proxy is configured", "A system HTTP, HTTPS, or SOCKS proxy is enabled.", "Confirm the proxy is expected and available."),
+	CodeNetworkVPNDetected:          entry("VPN interface is active", "One or more tunnel interfaces are present and may affect routing or DNS.", "Compare the result with the VPN disconnected only if your policy permits it."),
+	CodeNetworkListenersHigh:        entry("Many listening sockets are open", "The Mac has an unusually high number of listening TCP descriptors.", "Use system monitoring to identify the largest socket owners."),
+	CodeRelaunchFailed:              entry("Application relaunch failed", "The app did not quit, reopen, or remain running through verification.", "Review the reported step and diagnose the app before trying again."),
 }
 
 func entry(title, meaning, next string) Entry {

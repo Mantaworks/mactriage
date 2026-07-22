@@ -133,6 +133,55 @@ func TestAnalyzePartialEvidenceReturnsInconclusiveExit(t *testing.T) {
 	}
 }
 
+func TestAnalyzeDoctorRanksEverydayHealthProblems(t *testing.T) {
+	r := report.New("doctor", "this Mac")
+	r.Evidence = []report.Evidence{
+		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 5}},
+		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{FreePercent: 4, SwapUsedBytes: 6 << 30}},
+		{ID: report.EvidenceCPU, Status: report.StatusOK, Data: report.CPUData{LogicalCores: 4, LoadOne: 9, HighestPercent: 97, HighestProcess: "Example", StalledProcesses: 1}},
+		{ID: report.EvidenceServices, Status: report.StatusOK, Data: report.ServicesData{Running: map[string]bool{"syspolicyd": false, "trustd": true}}},
+		{ID: report.EvidenceUpdates, Status: report.StatusOK, Data: report.UpdatesData{Available: true}},
+		{ID: report.EvidenceRecentCrashes, Status: report.StatusOK, Data: report.RecentCrashesData{Count: 12}},
+		{ID: report.EvidenceStartupItems, Status: report.StatusOK, Data: report.StartupItemsData{Count: 120}},
+		{ID: report.EvidenceRestartLoops, Status: report.StatusOK, Data: report.RestartLoopsData{Processes: []report.ProcessRestartObservation{{Name: "com.example.Helper", Count: 4}}}},
+		{ID: report.EvidenceLimits, Status: report.StatusOK, Data: report.LimitsData{GlobalUsed: 900, GlobalMax: 1000}},
+	}
+
+	got := diagnosis.Analyze(r)
+	for _, expected := range []struct {
+		code     string
+		severity report.Severity
+	}{
+		{"doctor.storage_low", report.Error},
+		{"doctor.memory_pressure", report.Warning},
+		{"doctor.cpu_pressure", report.Warning},
+		{"doctor.process_stalled", report.Warning},
+		{"doctor.service_missing", report.Error},
+		{"doctor.updates_available", report.Info},
+		{"doctor.crash_volume", report.Warning},
+		{"doctor.startup_items_high", report.Warning},
+		{"doctor.restart_loop", report.Warning},
+		{"doctor.descriptor_pressure", report.Warning},
+	} {
+		assertFinding(t, got, expected.code, expected.severity)
+	}
+	if len(got.Actions) == 0 || got.Actions[0].ID != "open.software_update" {
+		t.Fatalf("expected Software Update action: %#v", got.Actions)
+	}
+}
+
+func TestAnalyzeNetworkDistinguishesConnectivityAndConfiguration(t *testing.T) {
+	r := report.New("network", "example.com")
+	r.Evidence = []report.Evidence{{ID: report.EvidenceNetwork, Status: report.StatusOK, Data: report.NetworkData{
+		Host: "example.com", DefaultRoute: true, HTTPSReachable: true, TLSValid: false, ProxyConfigured: true, VPNInterfaces: []string{"utun3"},
+	}}}
+	got := diagnosis.Analyze(r)
+	assertFinding(t, got, "network.dns_failed", report.Error)
+	assertFinding(t, got, "network.tls_invalid", report.Error)
+	assertFinding(t, got, "network.proxy_detected", report.Info)
+	assertFinding(t, got, "network.vpn_detected", report.Info)
+}
+
 func assertFinding(t *testing.T, r report.Report, code string, severity report.Severity) {
 	t.Helper()
 	for _, finding := range r.Findings {

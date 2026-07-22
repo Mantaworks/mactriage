@@ -17,6 +17,7 @@ import (
 
 type AppScanner struct {
 	Runner platform.Runner
+	Quick  bool
 }
 
 func StandardApplicationRoots() []string {
@@ -82,7 +83,7 @@ func (s AppScanner) Scan(ctx context.Context, roots []string, limit, workers int
 	status := report.StatusOK
 	summary := fmt.Sprintf("Inspected %d applications", len(apps))
 	for _, app := range apps {
-		if incompleteStatus(app.SignatureStatus) || incompleteStatus(app.ArchitectureStatus) {
+		if !s.Quick && (incompleteStatus(app.SignatureStatus) || incompleteStatus(app.ArchitectureStatus)) {
 			status = report.StatusPartial
 			break
 		}
@@ -167,16 +168,18 @@ func (s AppScanner) inspectApp(ctx context.Context, path string, host report.Hos
 		item.ExecutablePresent = true
 		item.ExecutableRunnable = info.Mode()&0o111 != 0
 	}
-	signature := s.Runner.Run(ctx, "/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", path)
-	switch {
-	case signature.TimedOut:
-		item.SignatureStatus = report.StatusTimedOut
-	case signature.Err != nil && signature.ExitCode < 0:
-		item.SignatureStatus = report.StatusUnavailable
-	default:
-		valid := signature.Err == nil
-		item.SignatureStatus = report.StatusOK
-		item.SignatureValid = &valid
+	if !s.Quick {
+		signature := s.Runner.Run(ctx, "/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", path)
+		switch {
+		case signature.TimedOut:
+			item.SignatureStatus = report.StatusTimedOut
+		case signature.Err != nil && signature.ExitCode < 0:
+			item.SignatureStatus = report.StatusUnavailable
+		default:
+			valid := signature.Err == nil
+			item.SignatureStatus = report.StatusOK
+			item.SignatureValid = &valid
+		}
 	}
 	if item.ExecutablePresent {
 		arch := s.Runner.Run(ctx, "/usr/bin/lipo", "-archs", app.ExecutablePath)

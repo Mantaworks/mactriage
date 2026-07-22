@@ -86,3 +86,20 @@ func TestWriteAtomicUsesPrivateMode(t *testing.T) {
 		t.Fatalf("mode=%#o, want 0600", info.Mode().Perm())
 	}
 }
+
+func TestHumanDoctorRendererShowsReadableHealthSnapshot(t *testing.T) {
+	r := report.New("doctor", "this Mac")
+	r.Evidence = []report.Evidence{
+		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 42}},
+		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{FreePercent: 31, SwapUsedBytes: 512 << 20}},
+		{ID: report.EvidenceCPU, Status: report.StatusOK, Data: report.CPUData{LoadOne: 2.5, LogicalCores: 8}},
+		{ID: report.EvidenceNetwork, Status: report.StatusOK, Data: report.NetworkData{DNSResolved: true, HTTPSReachable: true, TLSValid: true}},
+	}
+	var out bytes.Buffer
+	present.Human(&out, r, present.Style{Width: 80})
+	for _, want := range []string{"Health snapshot", "Disk", "Memory", "CPU", "Network"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("doctor output missing %q: %s", want, out.String())
+		}
+	}
+}

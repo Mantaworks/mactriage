@@ -8,10 +8,12 @@ import (
 )
 
 const (
-	RepairSyspolicyd report.ActionID = "repair.syspolicyd"
-	OpenSecurity     report.ActionID = "open.security"
-	LaunchRosetta    report.ActionID = "launch.rosetta_prompt"
-	RetryLaunch      report.ActionID = "retry.launch"
+	RepairSyspolicyd   report.ActionID = "repair.syspolicyd"
+	OpenSecurity       report.ActionID = "open.security"
+	LaunchRosetta      report.ActionID = "launch.rosetta_prompt"
+	RetryLaunch        report.ActionID = "retry.launch"
+	OpenSoftwareUpdate report.ActionID = "open.software_update"
+	RelaunchApp        report.ActionID = "relaunch.app"
 )
 
 type RecheckMode int
@@ -61,6 +63,18 @@ func Lookup(id report.ActionID, target string) (Spec, bool) {
 		return Spec{
 			Definition: report.Action{ID: id, Title: "Retry diagnosis and launch", Description: "Repeat the affected checks, launch the application once, and observe the result.", Command: []string{"mactriage", "diagnose", target}, Available: true},
 			Recheck:    RecheckLaunch, Completion: "Retrying the affected checks and launch…",
+		}, true
+	case OpenSoftwareUpdate:
+		return Spec{
+			Definition: report.Action{ID: id, Title: "Open Software Update", Description: "Open the macOS Software Update pane so you can review available updates. mactriage will not install anything.", Command: []string{"open", "/System/Library/PreferencePanes/SoftwareUpdate.prefPane"}, Available: true},
+			Recheck:    RecheckPassive, Completion: "Software Update opened. No update was installed. Rechecking availability…", Executable: true,
+			run: func(e Executor, ctx context.Context, _ string) (Outcome, error) {
+				return Outcome{}, e.openSoftwareUpdate(ctx)
+			},
+		}, true
+	case RelaunchApp:
+		return Spec{
+			Definition: report.Action{ID: id, Title: "Gracefully relaunch application", Description: "Warn about unsaved work, request graceful termination, reopen the application, and verify it remains running. Force termination requires a separate confirmation.", Command: []string{"mactriage", "relaunch", target}, Available: true},
 		}, true
 	default:
 		return Spec{}, false

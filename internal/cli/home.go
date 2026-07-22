@@ -20,7 +20,11 @@ func homeArgs(opts options, choice present.HomeChoice) []string {
 	if opts.json {
 		args = append(args, "--json")
 	}
-	args = append(args, choice.Task)
+	if choice.Task == "baseline-compare" {
+		args = append(args, "baseline", "compare")
+	} else {
+		args = append(args, choice.Task)
+	}
 	if choice.Target != "" {
 		args = append(args, choice.Target)
 	}

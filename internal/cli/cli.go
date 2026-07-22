@@ -22,12 +22,13 @@ import (
 )
 
 type Config struct {
-	Out     io.Writer
-	Err     io.Writer
-	Runner  platform.Runner
-	Version string
-	Commit  string
-	Date    string
+	Out         io.Writer
+	Err         io.Writer
+	Runner      platform.Runner
+	Version     string
+	Commit      string
+	Date        string
+	BaselineDir string
 }
 
 type options struct {
@@ -98,7 +99,7 @@ func New(config Config) *cobra.Command {
 	flags.StringVar(&app.opts.animation, "animation", "auto", "animation mode: auto, always, or never")
 	flags.DurationVar(&app.opts.timeout, "timeout", 15*time.Second, "timeout for each macOS evidence command")
 
-	root.AddCommand(app.diagnoseCommand(), app.collectCommand(), app.hangCommand(), app.permissionsCommand(), app.scanCommand(), app.compareCommand(), app.explainCommand(), app.summarizeCommand(), app.systemCommand(), app.watchCommand(), app.repairCommand(), app.completionCommand(root), app.versionCommand())
+	root.AddCommand(app.doctorCommand(), app.networkCommand(), app.relaunchCommand(), app.baselineCommand(), app.shareCommand(), app.diagnoseCommand(), app.collectCommand(), app.hangCommand(), app.permissionsCommand(), app.scanCommand(), app.compareCommand(), app.explainCommand(), app.summarizeCommand(), app.systemCommand(), app.watchCommand(), app.repairCommand(), app.completionCommand(root), app.versionCommand())
 	return root
 }
 

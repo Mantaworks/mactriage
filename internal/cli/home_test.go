@@ -16,3 +16,11 @@ func TestGuidedSelectionPreservesGlobalFlags(t *testing.T) {
 		t.Fatalf("args=%v want=%v", got, want)
 	}
 }
+
+func TestGuidedBaselineComparisonDispatchesNestedCommand(t *testing.T) {
+	got := homeArgs(options{color: "auto", animation: "auto", timeout: 15 * time.Second}, present.HomeChoice{Task: "baseline-compare", Target: "healthy"})
+	want := []string{"--color", "auto", "--animation", "auto", "--timeout", "15s", "baseline", "compare", "healthy"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("args=%v want=%v", got, want)
+	}
+}

@@ -65,6 +65,38 @@ func TestScanDoesNotCallOperationalCodesignFailureInvalid(t *testing.T) {
 	}
 }
 
+func TestQuickCompatibilityScanSkipsDeepSignatureVerification(t *testing.T) {
+	root := t.TempDir()
+	appPath := filepath.Join(root, "Example.app")
+	if err := os.MkdirAll(filepath.Join(appPath, "Contents", "MacOS"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appPath, "Contents", "MacOS", "App"), []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runner := &quickScanRunner{}
+	r, err := (macos.AppScanner{Runner: runner, Quick: true}).Scan(context.Background(), []string{root}, 10, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := r.Evidence[0].Data.(report.ScanData)
+	if runner.codesignCalls != 0 || data.Apps[0].SignatureStatus != report.StatusSkipped {
+		t.Fatalf("codesign calls=%d app=%#v", runner.codesignCalls, data.Apps[0])
+	}
+}
+
+type quickScanRunner struct {
+	scanRunner
+	codesignCalls int
+}
+
+func (r *quickScanRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	if path == "/usr/bin/codesign" {
+		r.codesignCalls++
+	}
+	return (scanRunner{}).Run(ctx, path, args...)
+}
+
 type unavailableSignatureRunner struct{ scanRunner }
 
 func (unavailableSignatureRunner) Run(ctx context.Context, path string, args ...string) platform.Result {

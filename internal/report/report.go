@@ -16,22 +16,32 @@ type Status string
 type EvidenceID string
 
 const (
-	EvidenceBundle       EvidenceID = "bundle"
-	EvidenceSignature    EvidenceID = "signature"
-	EvidenceGatekeeper   EvidenceID = "gatekeeper"
-	EvidenceQuarantine   EvidenceID = "quarantine"
-	EvidenceArchitecture EvidenceID = "architecture"
-	EvidenceDependencies EvidenceID = "dependencies"
-	EvidenceLimits       EvidenceID = "limits"
-	EvidenceLaunch       EvidenceID = "launch"
-	EvidenceLogs         EvidenceID = "logs"
-	EvidenceCrash        EvidenceID = "crash"
-	EvidenceDescriptors  EvidenceID = "descriptors"
-	EvidenceRestart      EvidenceID = "restart"
-	EvidenceTopProcesses EvidenceID = "top_processes"
-	EvidenceProcess      EvidenceID = "process"
-	EvidencePermissions  EvidenceID = "permissions"
-	EvidenceScan         EvidenceID = "scan"
+	EvidenceBundle        EvidenceID = "bundle"
+	EvidenceSignature     EvidenceID = "signature"
+	EvidenceGatekeeper    EvidenceID = "gatekeeper"
+	EvidenceQuarantine    EvidenceID = "quarantine"
+	EvidenceArchitecture  EvidenceID = "architecture"
+	EvidenceDependencies  EvidenceID = "dependencies"
+	EvidenceLimits        EvidenceID = "limits"
+	EvidenceLaunch        EvidenceID = "launch"
+	EvidenceLogs          EvidenceID = "logs"
+	EvidenceCrash         EvidenceID = "crash"
+	EvidenceDescriptors   EvidenceID = "descriptors"
+	EvidenceRestart       EvidenceID = "restart"
+	EvidenceTopProcesses  EvidenceID = "top_processes"
+	EvidenceProcess       EvidenceID = "process"
+	EvidencePermissions   EvidenceID = "permissions"
+	EvidenceScan          EvidenceID = "scan"
+	EvidenceStorage       EvidenceID = "storage"
+	EvidenceMemory        EvidenceID = "memory"
+	EvidenceCPU           EvidenceID = "cpu"
+	EvidenceServices      EvidenceID = "services"
+	EvidenceUpdates       EvidenceID = "updates"
+	EvidenceRecentCrashes EvidenceID = "recent_crashes"
+	EvidenceStartupItems  EvidenceID = "startup_items"
+	EvidenceNetwork       EvidenceID = "network"
+	EvidenceRestartLoops  EvidenceID = "restart_loops"
+	EvidenceRelaunch      EvidenceID = "relaunch"
 )
 
 const (
@@ -251,6 +261,83 @@ type ScanData struct {
 	Roots     []string     `json:"roots"`
 	Apps      []ScannedApp `json:"apps"`
 	Truncated bool         `json:"truncated"`
+}
+
+type StorageData struct {
+	evidenceMarker
+	TotalBytes       uint64  `json:"total_bytes"`
+	AvailableBytes   uint64  `json:"available_bytes"`
+	AvailablePercent float64 `json:"available_percent"`
+}
+
+type MemoryData struct {
+	evidenceMarker
+	TotalBytes    uint64  `json:"total_bytes"`
+	FreeBytes     uint64  `json:"free_bytes"`
+	FreePercent   float64 `json:"free_percent"`
+	SwapUsedBytes uint64  `json:"swap_used_bytes"`
+}
+
+type CPUData struct {
+	evidenceMarker
+	LogicalCores     int     `json:"logical_cores"`
+	LoadOne          float64 `json:"load_one"`
+	HighestPercent   float64 `json:"highest_percent"`
+	HighestProcess   string  `json:"highest_process,omitempty"`
+	StalledProcesses int     `json:"stalled_processes"`
+}
+
+type ServicesData struct {
+	evidenceMarker
+	Running map[string]bool `json:"running"`
+}
+
+type UpdatesData struct {
+	evidenceMarker
+	Available bool `json:"available"`
+	Cached    bool `json:"cached"`
+}
+
+type RecentCrashesData struct {
+	evidenceMarker
+	Count int `json:"count"`
+}
+
+type StartupItemsData struct {
+	evidenceMarker
+	Count  int    `json:"count"`
+	Source string `json:"source"`
+}
+
+type NetworkData struct {
+	evidenceMarker
+	Host                 string   `json:"host,omitempty"`
+	DNSResolved          bool     `json:"dns_resolved"`
+	HTTPSReachable       bool     `json:"https_reachable"`
+	TLSValid             bool     `json:"tls_valid"`
+	DefaultRoute         bool     `json:"default_route"`
+	ProxyConfigured      bool     `json:"proxy_configured"`
+	VPNInterfaces        []string `json:"vpn_interfaces,omitempty"`
+	ListeningSocketCount int      `json:"listening_socket_count"`
+}
+
+type ProcessRestartObservation struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+type RestartLoopsData struct {
+	evidenceMarker
+	Processes []ProcessRestartObservation `json:"processes,omitempty"`
+}
+
+type RelaunchData struct {
+	evidenceMarker
+	ProcessName string `json:"process_name"`
+	PIDs        []int  `json:"pids,omitempty"`
+	NewPIDs     []int  `json:"new_pids,omitempty"`
+	Forced      bool   `json:"forced"`
+	Survived    bool   `json:"survived"`
 }
 
 type Evidence struct {
