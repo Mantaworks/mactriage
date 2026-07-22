@@ -95,7 +95,21 @@ func (r Resolver) Resolve(ctx context.Context, input string) ([]App, error) {
 			}
 		}
 	}
-	if len(paths) == 0 && r.Runner != nil {
+	exact, fuzzy := r.matchingApps(ctx, paths, input, name)
+	if len(exact) > 0 {
+		sortApps(exact, roots)
+		return exact, nil
+	}
+	if len(fuzzy) > 0 {
+		sortApps(fuzzy, roots)
+		return fuzzy, nil
+	}
+
+	// Standard roots are evaluated first. Spotlight is a fallback when none of
+	// those bundles match, including bundle-ID lookups and nonstandard installs.
+	paths = nil
+	seen = map[string]bool{}
+	if r.Runner != nil {
 		query := `kMDItemContentType == "com.apple.application-bundle"`
 		result := r.Runner.Run(ctx, "/usr/bin/mdfind", query)
 		if result.Err == nil {
@@ -107,7 +121,19 @@ func (r Resolver) Resolve(ctx context.Context, input string) ([]App, error) {
 		}
 	}
 
-	var exact, fuzzy []App
+	exact, fuzzy = r.matchingApps(ctx, paths, input, name)
+	if len(exact) > 0 {
+		sortApps(exact, roots)
+		return exact, nil
+	}
+	if len(fuzzy) > 0 {
+		sortApps(fuzzy, roots)
+		return fuzzy, nil
+	}
+	return nil, &ResolveError{Code: "app.not_found", Input: input, Err: fmt.Errorf("application %q was not found", input)}
+}
+
+func (r Resolver) matchingApps(ctx context.Context, paths []string, input, name string) (exact, fuzzy []App) {
 	for _, path := range paths {
 		app, err := r.readBundle(ctx, path)
 		if err != nil {
@@ -119,15 +145,7 @@ func (r Resolver) Resolve(ctx context.Context, input string) ([]App, error) {
 			fuzzy = append(fuzzy, app)
 		}
 	}
-	if len(exact) > 0 {
-		sortApps(exact, roots)
-		return exact, nil
-	}
-	if len(fuzzy) > 0 {
-		sortApps(fuzzy, roots)
-		return fuzzy, nil
-	}
-	return nil, &ResolveError{Code: "app.not_found", Input: input, Err: fmt.Errorf("application %q was not found", input)}
+	return exact, fuzzy
 }
 
 func classifyResolveError(input string, err error) error {

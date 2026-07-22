@@ -20,10 +20,48 @@ type RestartResult struct {
 	Restarted bool `json:"restarted"`
 }
 
+type Outcome struct {
+	Restart *RestartResult
+}
+
 type Executor struct {
 	Runner       platform.Runner
 	EUID         func() int
 	PollInterval time.Duration
+}
+
+func (e Executor) openSecurity(ctx context.Context) error {
+	if result := e.Runner.Run(ctx, "/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?General"); result.Err != nil {
+		return result.Err
+	}
+	if err := e.waitForProcess(ctx, "System Settings", 5*time.Second); err != nil {
+		return fmt.Errorf("verify System Settings: %w", err)
+	}
+	return nil
+}
+
+func (e Executor) launchRosetta(ctx context.Context, target string) error {
+	return e.Runner.Run(ctx, "/usr/bin/open", "-a", target).Err
+}
+
+func (e Executor) waitForProcess(ctx context.Context, name string, timeout time.Duration) error {
+	interval := e.PollInterval
+	if interval <= 0 {
+		interval = 250 * time.Millisecond
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		result := e.Runner.Run(ctx, "/usr/bin/pgrep", "-x", name)
+		if result.Err == nil && strings.TrimSpace(result.Stdout) != "" {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+		}
+	}
+	return errors.New("process did not appear before the verification deadline")
 }
 
 func (e Executor) RestartSyspolicyd(ctx context.Context) (RestartResult, error) {

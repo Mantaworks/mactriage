@@ -7,8 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -43,10 +42,9 @@ type options struct {
 }
 
 type application struct {
-	config   Config
-	opts     options
-	runner   platform.Runner
-	exitCode int
+	config Config
+	opts   options
+	runner platform.Runner
 }
 
 func New(config Config) *cobra.Command {
@@ -129,11 +127,22 @@ func (a *application) prepare() error {
 		}
 		a.runner = platform.ExecRunner{Timeout: a.opts.timeout, MaxOutput: 16 << 20, Verbose: verbose}
 	}
+	if runtime.GOOS != "darwin" {
+		return errors.New("mactriage requires macOS 13 or newer")
+	}
+	if a.config.Runner == nil {
+		version := a.runner.Run(context.Background(), "/usr/bin/sw_vers", "-productVersion")
+		if version.Err == nil && strings.TrimSpace(version.Stdout) != "" {
+			major, _ := strconv.Atoi(strings.Split(strings.TrimSpace(version.Stdout), ".")[0])
+			if major > 0 && major < 13 {
+				return fmt.Errorf("mactriage requires macOS 13 or newer (found %s)", strings.TrimSpace(version.Stdout))
+			}
+		}
+	}
 	return nil
 }
 
 func (a *application) setExit(cmd *cobra.Command, code int) {
-	a.exitCode = code
 	root := cmd.Root()
 	if root.Annotations == nil {
 		root.Annotations = map[string]string{}
@@ -171,15 +180,22 @@ func (a *application) diagnoseCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := cmd.Context().Err(); err != nil {
+				return err
+			}
 			if err := a.renderReport(r); err != nil {
 				return err
 			}
-			a.setExit(cmd, r.ExitCode())
 			if a.canPrompt() && !a.opts.json {
-				if err := a.offerActions(cmd.Context(), selected, opts, r); err != nil {
+				rechecked, err := a.offerActions(cmd.Context(), selected, opts, r)
+				if err != nil {
 					return err
 				}
+				if rechecked != nil {
+					r = *rechecked
+				}
 			}
+			a.setExit(cmd, r.ExitCode())
 			return nil
 		},
 	}
@@ -202,15 +218,8 @@ func (a *application) collectDiagnosis(ctx context.Context, target string, opts 
 			var resolveErr *macos.ResolveError
 			if errors.As(err, &resolveErr) {
 				r := report.New("diagnose", target)
-				title := "Application was not found"
-				explanation := "No matching macOS application bundle could be resolved."
-				if resolveErr.Code == "bundle.invalid" {
-					title = "The application bundle is invalid"
-					explanation = "The path exists but does not contain readable application bundle metadata."
-				}
-				r.Evidence = append(r.Evidence, report.Evidence{ID: "bundle", Status: report.StatusFailed, Summary: title, Error: resolveErr.Error()})
-				r.Findings = append(r.Findings, report.Finding{Code: resolveErr.Code, Severity: report.Error, Title: title, Explanation: explanation, Confidence: "high", EvidenceIDs: []string{"bundle"}, Recommendation: "Check the path or reinstall the application from its publisher."})
-				return r, nil
+				r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidenceBundle, Status: report.StatusFailed, Summary: "Application bundle resolution failed", Error: resolveErr.Error(), Data: report.ResolutionData{ResolveCode: resolveErr.Code}})
+				return diagnosis.Analyze(r), nil
 			}
 			return report.Report{}, err
 		}
@@ -312,6 +321,9 @@ func (a *application) systemCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := cmd.Context().Err(); err != nil {
+				return err
+			}
 			if err := a.renderReport(r); err != nil {
 				return err
 			}
@@ -368,7 +380,13 @@ func (a *application) watchCommand() *cobra.Command {
 				if a.opts.json {
 					return present.NDJSON(a.config.Out, event)
 				}
-				message := fmt.Sprintf("PID %d · %d descriptors · Δ%d · %s", event.PID, event.DescriptorCount, event.Growth, event.Message)
+				message := fmt.Sprintf("PID %d · %d descriptors · Δ%d (%.1f/s) · %s", event.PID, event.DescriptorCount, event.Growth, event.GrowthRate, event.Message)
+				if types := summarizeCounts(event.ByType, 4); types != "" {
+					message += " · types " + types
+				}
+				if paths := summarizeCounts(event.ByPath, 3); paths != "" {
+					message += " · paths " + paths
+				}
 				present.HumanWatch(a.config.Out, event.Timestamp.Local().Format("15:04:05"), event.Severity, message, a.color())
 				return nil
 			}
@@ -405,28 +423,16 @@ func (a *application) repairCommand() *cobra.Command {
 		Short: "Restart syspolicyd and verify launchd relaunches it",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if a.opts.json {
+				return errors.New("repair is disabled in JSON mode; no changes were made")
+			}
 			if os.Geteuid() != 0 {
-				if yes || !a.canPrompt() || a.opts.json {
+				if yes || !a.canPrompt() {
 					return errors.New("repair requires root; run interactively or use sudo mactriage repair syspolicyd --yes")
 				}
-				approved, err := present.Confirm("Restart syspolicyd?", "This will terminate syspolicyd. macOS should restart it automatically. mactriage will verify the new PID. Default: No.", a.opts.accessible)
-				if err != nil {
-					return err
-				}
-				if !approved {
-					fmt.Fprintln(a.config.Err, "No changes made.")
-					a.setExit(cmd, 0)
-					return nil
-				}
-				code, err := a.runSudo(cmd.Context(), []string{"repair", "syspolicyd", "--yes"})
-				if err != nil {
-					return err
-				}
-				a.setExit(cmd, code)
-				return nil
 			}
 			if !yes {
-				if !a.canPrompt() || a.opts.json {
+				if !a.canPrompt() {
 					return errors.New("noninteractive repair requires --yes")
 				}
 				approved, err := present.Confirm("Restart syspolicyd?", "This will terminate syspolicyd. macOS should restart it automatically. mactriage will verify the new PID. Default: No.", a.opts.accessible)
@@ -438,15 +444,24 @@ func (a *application) repairCommand() *cobra.Command {
 					return err
 				}
 			}
+			if os.Geteuid() != 0 {
+				code, err := a.runSudo(cmd.Context(), []string{"repair", "syspolicyd", "--yes"})
+				if err != nil {
+					return err
+				}
+				a.setExit(cmd, code)
+				return nil
+			}
 			executor := action.Executor{Runner: a.runner}
-			result, err := executor.RestartSyspolicyd(cmd.Context())
+			outcome, err := executor.Execute(cmd.Context(), action.RepairSyspolicyd, "syspolicyd")
 			r := report.New("repair", "syspolicyd")
 			if err != nil {
 				r.Evidence = append(r.Evidence, report.Evidence{ID: "restart", Status: report.StatusFailed, Summary: "syspolicyd did not restart", Error: err.Error()})
-				r.Findings = append(r.Findings, report.Finding{Code: "repair.failed", Severity: report.Error, Title: "syspolicyd restart failed", Explanation: err.Error(), Confidence: "high"})
 			} else {
-				r.Evidence = append(r.Evidence, report.Evidence{ID: "restart", Status: report.StatusOK, Summary: fmt.Sprintf("syspolicyd restarted with PID %d", result.NewPID), Data: map[string]any{"old_pid": result.OldPID, "new_pid": result.NewPID, "restarted": result.Restarted}})
+				result := outcome.Restart
+				r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidenceRestart, Status: report.StatusOK, Summary: fmt.Sprintf("syspolicyd restarted with PID %d", result.NewPID), Data: report.RestartData{OldPID: result.OldPID, NewPID: result.NewPID, Restarted: result.Restarted}})
 			}
+			r = diagnosis.Analyze(r)
 			if renderErr := a.renderReport(r); renderErr != nil {
 				return renderErr
 			}
@@ -457,54 +472,6 @@ func (a *application) repairCommand() *cobra.Command {
 	syspolicyd.Flags().BoolVar(&yes, "yes", false, "confirm the explicit repair without an interactive prompt")
 	repair.AddCommand(syspolicyd)
 	return repair
-}
-
-func (a *application) offerActions(ctx context.Context, selected macos.App, opts macos.DiagnoseOptions, r report.Report) error {
-	for _, available := range r.Actions {
-		description := available.Description
-		if len(available.Command) > 0 {
-			description += "\nCommand: " + strings.Join(available.Command, " ")
-		}
-		approved, err := present.Confirm(available.Title+"?", description+"\nDefault: No.", a.opts.accessible)
-		if err != nil {
-			return err
-		}
-		if !approved {
-			continue
-		}
-		switch available.ID {
-		case "repair.syspolicyd":
-			if os.Geteuid() != 0 {
-				code, err := a.runSudo(ctx, []string{"repair", "syspolicyd", "--yes"})
-				if err != nil || code != 0 {
-					return fmt.Errorf("syspolicyd repair exited with code %d: %w", code, err)
-				}
-			} else {
-				if _, err := (action.Executor{Runner: a.runner}).RestartSyspolicyd(ctx); err != nil {
-					return err
-				}
-			}
-			fmt.Fprintln(a.config.Err, "\nRepair completed. Rechecking the application…")
-			rechecked, _, err := a.collectDiagnosis(ctx, selected.Path, opts)
-			if err != nil {
-				return err
-			}
-			return a.renderReport(rechecked)
-		case "open.security":
-			result := a.runner.Run(ctx, "/usr/bin/open", "x-apple.systempreferences:com.apple.preference.security?General")
-			if result.Err != nil {
-				return result.Err
-			}
-			fmt.Fprintln(a.config.Err, "Privacy & Security is open. mactriage has not changed the policy decision.")
-		case "launch.rosetta_prompt":
-			result := a.runner.Run(ctx, "/usr/bin/open", "-a", selected.Path)
-			if result.Err != nil {
-				return result.Err
-			}
-			fmt.Fprintln(a.config.Err, "The app was launched. If Rosetta is missing, macOS will present Apple's installation prompt.")
-		}
-	}
-	return nil
 }
 
 func (a *application) completionCommand(root *cobra.Command) *cobra.Command {
@@ -565,146 +532,4 @@ func (a *application) renderReport(r report.Report) error {
 	}
 	present.Human(a.config.Out, r, present.Style{Color: a.color(), Width: terminalWidth()})
 	return nil
-}
-
-func (a *application) color() bool {
-	if a.opts.plain || a.opts.json || a.opts.color == "never" {
-		return false
-	}
-	if a.opts.color == "always" {
-		return true
-	}
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-	return writerTTY(a.config.Out)
-}
-
-func (a *application) animate() bool {
-	if a.opts.plain || a.opts.accessible || a.opts.json || a.opts.animation == "never" {
-		return false
-	}
-	if a.opts.animation == "always" {
-		return true
-	}
-	if os.Getenv("CI") != "" || os.Getenv("TERM") == "dumb" {
-		return false
-	}
-	return writerTTY(a.config.Err)
-}
-
-func (a *application) canPrompt() bool {
-	return !a.opts.json && fileTTY(os.Stdin) && writerTTY(a.config.Err)
-}
-
-func (a *application) elevate(ctx context.Context, reason string, args []string) (bool, int, error) {
-	if a.opts.json || !a.canPrompt() {
-		return false, 0, errors.New("administrator access is required; rerun this command with sudo")
-	}
-	approved, err := present.Confirm("Continue with administrator access?", reason+"\nThe exact mactriage command will be re-run through /usr/bin/sudo. Default: No.", a.opts.accessible)
-	if err != nil {
-		return false, 0, err
-	}
-	if !approved {
-		return false, 0, errors.New("administrator access was declined; no changes were made")
-	}
-	code, err := a.runSudo(ctx, args)
-	return true, code, err
-}
-
-func (a *application) runSudo(ctx context.Context, args []string) (int, error) {
-	executable, err := os.Executable()
-	if err != nil {
-		return 2, err
-	}
-	commandArgs := append([]string{"--", executable}, args...)
-	cmd := exec.CommandContext(ctx, "/usr/bin/sudo", commandArgs...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = a.config.Out
-	cmd.Stderr = a.config.Err
-	err = cmd.Run()
-	if err == nil {
-		return 0, nil
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return exitErr.ExitCode(), nil
-	}
-	return 2, err
-}
-
-func oneOf(value string, allowed ...string) bool {
-	for _, candidate := range allowed {
-		if value == candidate {
-			return true
-		}
-	}
-	return false
-}
-
-func writerTTY(writer io.Writer) bool {
-	file, ok := writer.(*os.File)
-	return ok && fileTTY(file)
-}
-
-func fileTTY(file *os.File) bool {
-	info, err := file.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}
-
-func terminalWidth() int {
-	if width, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && width >= 40 {
-		return width
-	}
-	return 88
-}
-
-func configWriter(value, fallback io.Writer) io.Writer {
-	if value != nil {
-		return value
-	}
-	return fallback
-}
-
-type atomicStream struct {
-	path string
-	temp string
-	file *os.File
-}
-
-func newAtomicStream(path string) (*atomicStream, error) {
-	dir := filepath.Dir(path)
-	file, err := os.CreateTemp(dir, ".mactriage-watch-*")
-	if err != nil {
-		return nil, err
-	}
-	if err := file.Chmod(0o600); err != nil {
-		file.Close()
-		os.Remove(file.Name())
-		return nil, err
-	}
-	return &atomicStream{path: path, temp: file.Name(), file: file}, nil
-}
-
-func (s *atomicStream) Commit() error {
-	if s.file == nil {
-		return nil
-	}
-	if err := s.file.Sync(); err != nil {
-		return err
-	}
-	if err := s.file.Close(); err != nil {
-		return err
-	}
-	s.file = nil
-	return os.Rename(s.temp, s.path)
-}
-
-func (s *atomicStream) Abort() {
-	if s.file != nil {
-		s.file.Close()
-	}
-	if s.temp != "" {
-		os.Remove(s.temp)
-	}
 }

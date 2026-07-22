@@ -27,6 +27,8 @@ jobs:
         run: go vet ./...
       - name: Test with race detector
         run: go test -race ./...
+      - name: Passive macOS integration test
+        run: go test -tags=integration ./internal/macos -run '^TestIntegration'
       - name: Cross-build supported architectures
         run: |
           GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath ./cmd/mactriage

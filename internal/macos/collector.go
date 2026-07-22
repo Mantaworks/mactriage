@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -78,8 +75,8 @@ func (c Collector) Collect(ctx context.Context, app App, opts DiagnoseOptions) (
 
 	launchStart := time.Now()
 	if opts.NoLaunch {
-		launchStart = launchStart.Add(-5 * time.Minute)
-		r.Evidence = append(r.Evidence, report.Evidence{ID: "launch", Status: report.StatusSkipped, Summary: "Launch test disabled by --no-launch", Data: map[string]any{"skipped": true}})
+		launchStart = launchStart.Add(-time.Minute)
+		r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidenceLaunch, Status: report.StatusSkipped, Summary: "Launch test disabled by --no-launch", Data: report.LaunchData{Skipped: true}})
 	} else {
 		c.emit("launch", "Launch and observe application", "running", 0)
 		r.Evidence = append(r.Evidence, c.launch(ctx, app, opts))
@@ -105,6 +102,7 @@ func (c Collector) Collect(ctx context.Context, app App, opts DiagnoseOptions) (
 	}()
 	wg.Wait()
 	r.Evidence = append(r.Evidence, post...)
+	correlateCrashTermination(&r)
 
 	if opts.Privileged {
 		r.Evidence = append(r.Evidence, c.processDescriptors(ctx, "syspolicyd"))
@@ -121,7 +119,16 @@ func (c Collector) emit(id, label, status string, duration time.Duration) {
 }
 
 func (c Collector) host(ctx context.Context) report.Host {
-	host := report.Host{Arch: runtime.GOARCH}
+	host := report.Host{}
+	if result := c.Runner.Run(ctx, "/usr/bin/uname", "-m"); result.Err == nil {
+		host.Arch = strings.TrimSpace(result.Stdout)
+		if host.Arch == "x86_64" {
+			host.Arch = "amd64"
+		}
+	}
+	if result := c.Runner.Run(ctx, "/usr/sbin/sysctl", "-n", "hw.optional.arm64"); result.Err == nil && strings.TrimSpace(result.Stdout) == "1" {
+		host.Arch = "arm64"
+	}
 	if result := c.Runner.Run(ctx, "/usr/bin/sw_vers", "-productVersion"); result.Err == nil {
 		host.OSVersion = strings.TrimSpace(result.Stdout)
 	}
@@ -132,33 +139,25 @@ func (c Collector) host(ctx context.Context) report.Host {
 }
 
 func (c Collector) bundleEvidence(app App, osVersion string) report.Evidence {
-	data := map[string]any{
-		"path": app.Path, "name": app.Name, "bundle_id": app.BundleID, "executable": app.Executable,
-		"version": app.Version, "minimum_os": app.MinimumOS,
-	}
-	data["executable_declared"] = app.Executable != ""
+	data := report.BundleData{Path: app.Path, Name: app.Name, BundleID: app.BundleID, Executable: app.Executable, Version: app.Version, MinimumOS: app.MinimumOS, ExecutableDeclared: app.Executable != ""}
 	status := report.StatusOK
 	summary := "Application bundle metadata is readable"
 	if app.Executable == "" {
-		data["executable_present"] = false
-		data["executable_runnable"] = false
 		status, summary = report.StatusFailed, "Bundle does not declare CFBundleExecutable"
 	} else if info, err := os.Stat(app.ExecutablePath); err != nil || info.IsDir() {
-		data["executable_present"] = false
-		data["executable_runnable"] = false
 		status, summary = report.StatusFailed, "Bundle executable is missing"
 	} else if info.Mode()&0o111 == 0 {
-		data["executable_present"] = true
-		data["executable_runnable"] = false
+		data.ExecutablePresent = true
 		status, summary = report.StatusFailed, "Bundle executable is not executable"
 	} else {
-		data["executable_present"] = true
-		data["executable_runnable"] = true
+		data.ExecutablePresent = true
+		data.ExecutableRunnable = true
 	}
 	if app.MinimumOS != "" && osVersion != "" {
-		data["os_supported"] = compareVersions(osVersion, app.MinimumOS) >= 0
+		supported := compareVersions(osVersion, app.MinimumOS) >= 0
+		data.OSSupported = &supported
 	}
-	return report.Evidence{ID: "bundle", Status: status, Summary: summary, Data: data}
+	return report.Evidence{ID: report.EvidenceBundle, Status: status, Summary: summary, Data: data}
 }
 
 func (c Collector) signature(ctx context.Context, app App) report.Evidence {
@@ -180,7 +179,7 @@ func (c Collector) signature(ctx context.Context, app App) report.Evidence {
 	if !valid {
 		status, summary = report.StatusFailed, "Strict recursive code-signature verification failed"
 	}
-	return report.Evidence{ID: "signature", Status: status, Summary: summary, Data: map[string]any{"valid": valid, "reason": reason}}
+	return report.Evidence{ID: report.EvidenceSignature, Status: status, Summary: summary, Data: report.SignatureData{Valid: valid, Reason: reason}}
 }
 
 func (c Collector) gatekeeper(ctx context.Context, app App) report.Evidence {
@@ -198,7 +197,7 @@ func (c Collector) gatekeeper(ctx context.Context, app App) report.Evidence {
 	if !accepted {
 		status, summary = report.StatusFailed, "Gatekeeper did not accept the application"
 	}
-	return report.Evidence{ID: "gatekeeper", Status: status, Summary: summary, Data: map[string]any{"accepted": accepted, "reason": reason}}
+	return report.Evidence{ID: report.EvidenceGatekeeper, Status: status, Summary: summary, Data: report.GatekeeperData{Accepted: accepted, Reason: reason}}
 }
 
 func (c Collector) quarantine(ctx context.Context, app App) report.Evidence {
@@ -206,12 +205,18 @@ func (c Collector) quarantine(ctx context.Context, app App) report.Evidence {
 	if result.TimedOut {
 		return timedOut("quarantine", "Quarantine metadata check timed out")
 	}
+	if result.Err != nil {
+		text := strings.ToLower(result.Stderr + " " + result.Stdout + " " + result.Err.Error())
+		if !strings.Contains(text, "no such xattr") && !strings.Contains(text, "attribute not found") {
+			return unavailable("quarantine", "Quarantine metadata could not be read")
+		}
+	}
 	present := result.Err == nil && strings.TrimSpace(result.Stdout) != ""
 	summary := "No bundle-level quarantine attribute found"
 	if present {
 		summary = "Bundle has quarantine metadata"
 	}
-	return report.Evidence{ID: "quarantine", Status: report.StatusOK, Summary: summary, Data: map[string]any{"present": present}}
+	return report.Evidence{ID: report.EvidenceQuarantine, Status: report.StatusOK, Summary: summary, Data: report.QuarantineData{Present: present}}
 }
 
 func (c Collector) architecture(ctx context.Context, app App) report.Evidence {
@@ -226,10 +231,7 @@ func (c Collector) architecture(ctx context.Context, app App) report.Evidence {
 		return unavailable("architecture", "Could not inspect executable architectures")
 	}
 	architectures := strings.Fields(strings.TrimSpace(result.Stdout))
-	hasARM, hasX86 := contains(architectures, "arm64") || contains(architectures, "arm64e"), contains(architectures, "x86_64")
-	rosetta := runtime.GOARCH == "arm64" && hasX86 && !hasARM
-	incompatible := (runtime.GOARCH == "arm64" && !hasARM && !hasX86) || (runtime.GOARCH == "amd64" && !hasX86)
-	return report.Evidence{ID: "architecture", Status: report.StatusOK, Summary: "Executable architectures inspected", Data: map[string]any{"architectures": architectures, "rosetta_required": rosetta, "incompatible": incompatible}}
+	return report.Evidence{ID: report.EvidenceArchitecture, Status: report.StatusOK, Summary: "Executable architectures inspected", Data: report.ArchitectureData{Architectures: architectures}}
 }
 
 func (c Collector) dependencies(ctx context.Context, app App) report.Evidence {
@@ -260,15 +262,15 @@ func (c Collector) dependencies(ctx context.Context, app App) report.Evidence {
 	if missing > 0 {
 		status, summary = report.StatusFailed, fmt.Sprintf("%d non-system dynamic libraries could not be resolved", missing)
 	}
-	return report.Evidence{ID: "dependencies", Status: status, Summary: summary, Data: map[string]any{"missing_count": missing}}
+	return report.Evidence{ID: report.EvidenceDependencies, Status: status, Summary: summary, Data: report.DependencyData{MissingCount: missing}}
 }
 
 func (c Collector) limits(ctx context.Context) report.Evidence {
-	data := map[string]any{}
+	data := report.LimitsData{}
 	var limit syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &limit); err == nil {
-		data["process_soft"] = limit.Cur
-		data["process_hard"] = limit.Max
+		data.ProcessSoft = limit.Cur
+		data.ProcessHard = limit.Max
 	}
 	result := c.Runner.Run(ctx, "/usr/sbin/sysctl", "kern.num_files", "kern.maxfiles", "kern.maxfilesperproc")
 	if result.TimedOut {
@@ -288,23 +290,29 @@ func (c Collector) limits(ctx context.Context) report.Evidence {
 		}
 		switch strings.TrimSpace(parts[0]) {
 		case "kern.num_files":
-			data["global_used"] = value
+			data.GlobalUsed = value
 		case "kern.maxfiles":
-			data["global_max"] = value
+			data.GlobalMax = value
 		case "kern.maxfilesperproc":
-			data["kernel_per_process_max"] = value
+			data.KernelProcessMax = value
 		}
 	}
 	if launchctl := c.Runner.Run(ctx, "/bin/launchctl", "limit", "maxfiles"); launchctl.Err == nil {
-		data["launchctl"] = strings.Join(strings.Fields(launchctl.Stdout), " ")
+		fields := strings.Fields(launchctl.Stdout)
+		data.Launchctl = strings.Join(fields, " ")
+		if len(fields) >= 2 {
+			if soft, err := strconv.ParseUint(fields[1], 10, 64); err == nil {
+				data.LaunchdProcessSoft = soft
+			}
+		}
 	}
-	return report.Evidence{ID: "limits", Status: report.StatusOK, Summary: "Descriptor limits collected", Data: data}
+	return report.Evidence{ID: report.EvidenceLimits, Status: report.StatusOK, Summary: "Descriptor limits collected", Data: data}
 }
 
 func (c Collector) launch(ctx context.Context, app App, opts DiagnoseOptions) report.Evidence {
 	before := c.matchingPIDs(ctx, app.ExecutablePath)
 	if len(before) > 0 && !opts.NewInstance {
-		return report.Evidence{ID: "launch", Status: report.StatusSkipped, Summary: "Application is already running", Data: map[string]any{"already_running": true, "existing_processes": len(before)}}
+		return report.Evidence{ID: report.EvidenceLaunch, Status: report.StatusSkipped, Summary: "Application is already running", Data: report.LaunchData{AlreadyRunning: true, ExistingProcesses: len(before)}}
 	}
 	args := []string{}
 	if opts.NewInstance {
@@ -316,7 +324,8 @@ func (c Collector) launch(ctx context.Context, app App, opts DiagnoseOptions) re
 		return timedOut("launch", "Launch request timed out")
 	}
 	if result.Err != nil {
-		return report.Evidence{ID: "launch", Status: report.StatusFailed, Summary: "Launch Services rejected the launch request", Data: map[string]any{"spawned": false}}
+		spawned := false
+		return report.Evidence{ID: report.EvidenceLaunch, Status: report.StatusFailed, Summary: "Launch Services rejected the launch request", Data: report.LaunchData{Spawned: &spawned}}
 	}
 	deadline := time.Now().Add(opts.Observe)
 	seen := map[int]bool{}
@@ -346,14 +355,15 @@ func (c Collector) launch(ctx context.Context, app App, opts DiagnoseOptions) re
 			survived = true
 		}
 	}
-	data := map[string]any{"spawned": len(seen) > 0, "survived": survived, "terminated": terminated && !survived, "observed_processes": len(seen), "exit_signal": "unknown"}
+	spawned := len(seen) > 0
+	data := report.LaunchData{Spawned: &spawned, Survived: survived, Terminated: terminated && !survived, ObservedProcesses: len(seen), ExitSignal: "unknown"}
 	summary := "No matching application process was observed"
 	if survived {
 		summary = "Application process survived the observation window"
 	} else if terminated {
 		summary = "Application process terminated during the observation window"
 	}
-	return report.Evidence{ID: "launch", Status: report.StatusOK, Summary: summary, Data: data}
+	return report.Evidence{ID: report.EvidenceLaunch, Status: report.StatusOK, Summary: summary, Data: data}
 }
 
 func (c Collector) matchingPIDs(ctx context.Context, executablePath string) map[int]bool {
@@ -388,7 +398,16 @@ func (c Collector) logs(ctx context.Context, app App, start, end time.Time) repo
 			parts = append(parts, `process == "`+predicateEscape(name)+`"`)
 		}
 	}
-	predicate := strings.Join(parts, " OR ")
+	messageTerms := []string{
+		"too many open files", "file table overflow", "error exception: 24", "error exception: 23", "errno 24", "errno 23",
+		"failed to generate SecStaticCode", "code signature invalid", "invalid signature", "gatekeeper", "notari",
+		"xprotect", "malware", "launchservices", "termination reported", "terminated with", "exited with", "library not loaded", "dyld: library",
+	}
+	messageParts := make([]string, 0, len(messageTerms))
+	for _, term := range messageTerms {
+		messageParts = append(messageParts, `eventMessage CONTAINS[c] "`+predicateEscape(term)+`"`)
+	}
+	predicate := "(" + strings.Join(parts, " OR ") + ") AND (" + strings.Join(messageParts, " OR ") + ")"
 	format := "2006-01-02 15:04:05-0700"
 	result := c.Runner.Run(ctx, "/usr/bin/log", "show", "--style", "ndjson", "--start", start.Local().Format(format), "--end", end.Local().Format(format), "--predicate", predicate)
 	if result.TimedOut {
@@ -398,11 +417,12 @@ func (c Collector) logs(ctx context.Context, app App, start, end time.Time) repo
 		return unavailable("logs", "Unified logs could not be queried")
 	}
 	summary := ParseLogEvents([]byte(result.Stdout))
-	return report.Evidence{ID: "logs", Status: report.StatusOK, Summary: "Correlated system logs inspected", Data: map[string]any{
-		"emfile": summary.EMFILE, "enfile": summary.ENFILE, "sec_static_code": summary.SecStaticCode,
-		"signature_errors": summary.Signature, "gatekeeper_errors": summary.Gatekeeper, "notarization_errors": summary.Notarization,
-		"xprotect": summary.XProtect, "launch_services": summary.LaunchServices, "terminations": summary.Terminations, "missing_library": summary.MissingLibrary,
-	}}
+	status, text := report.StatusOK, "Correlated system logs inspected"
+	if result.Truncated {
+		status, text = report.StatusPartial, "Correlated system logs inspected (bounded output was truncated)"
+	}
+	data := report.LogsData{EMFILE: summary.EMFILE, ENFILE: summary.ENFILE, SecStaticCode: summary.SecStaticCode, SyspolicydEMFILE: summary.SyspolicydEMFILE, SyspolicydENFILE: summary.SyspolicydENFILE, SyspolicydSecStaticCode: summary.SyspolicydSecStaticCode, SyspolicydWedgeSequence: summary.SyspolicydWedgeSequence, SignatureErrors: summary.Signature, GatekeeperErrors: summary.Gatekeeper, NotarizationErrors: summary.Notarization, XProtect: summary.XProtect, LaunchServices: summary.LaunchServices, Terminations: summary.Terminations, MissingLibrary: summary.MissingLibrary}
+	return report.Evidence{ID: report.EvidenceLogs, Status: status, Summary: text, Data: data}
 }
 
 func (c Collector) crashes(app App, start, end time.Time) report.Evidence {
@@ -413,7 +433,7 @@ func (c Collector) crashes(app App, start, end time.Time) report.Evidence {
 	dirs := []string{filepath.Join(home, "Library", "Logs", "DiagnosticReports"), "/Library/Logs/DiagnosticReports"}
 	count := 0
 	signals := map[string]int{}
-	signalPattern := regexp.MustCompile(`(?i)\b(SIG[A-Z0-9]+)\b`)
+	terminations := []CrashTermination{}
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
@@ -439,12 +459,45 @@ func (c Collector) crashes(app App, start, end time.Time) report.Evidence {
 			n, _ := file.Read(buf)
 			file.Close()
 			count++
-			if match := signalPattern.FindStringSubmatch(string(buf[:n])); len(match) > 1 {
-				signals[strings.ToUpper(match[1])]++
+			termination := ParseCrashTermination(buf[:n], filepath.Ext(entry.Name()))
+			if termination != (CrashTermination{}) {
+				terminations = append(terminations, termination)
+			}
+			if termination.Signal != "" {
+				signals[strings.ToUpper(termination.Signal)]++
 			}
 		}
 	}
-	return report.Evidence{ID: "crash", Status: report.StatusOK, Summary: fmt.Sprintf("Found %d correlated crash reports", count), Data: map[string]any{"count": count, "signals": signals}}
+	return report.Evidence{ID: report.EvidenceCrash, Status: report.StatusOK, Summary: fmt.Sprintf("Found %d correlated crash reports", count), Data: report.CrashData{Count: count, Signals: signals, Terminations: terminations}}
+}
+
+func correlateCrashTermination(r *report.Report) {
+	var signal string
+	for _, evidence := range r.Evidence {
+		if evidence.ID != "crash" {
+			continue
+		}
+		crash, ok := evidence.Data.(report.CrashData)
+		if ok && len(crash.Signals) == 1 {
+			for value := range crash.Signals {
+				signal = value
+			}
+		}
+	}
+	if signal == "" {
+		return
+	}
+	for i := range r.Evidence {
+		if r.Evidence[i].ID != "launch" {
+			continue
+		}
+		launch, ok := r.Evidence[i].Data.(report.LaunchData)
+		if ok && launch.Terminated {
+			launch.ExitSignal = signal
+			launch.TerminationSource = "crash_report"
+			r.Evidence[i].Data = launch
+		}
+	}
 }
 
 func (c Collector) processDescriptors(ctx context.Context, process string) report.Evidence {
@@ -461,14 +514,21 @@ func (c Collector) processDescriptors(ctx context.Context, process string) repor
 		return unavailable("descriptors", "Descriptor enumeration requires additional privileges")
 	}
 	sample := ParseLSOF([]byte(result.Stdout))
-	return report.Evidence{ID: "descriptors", Status: report.StatusOK, Summary: fmt.Sprintf("Counted %d numeric descriptors for %s", sample.Count, process), Data: map[string]any{"process": process, "pid": pid, "count": sample.Count, "by_type": sample.ByType}}
+	data := report.DescriptorData{Process: process, PID: pid, Count: sample.Count, ByType: sample.ByType}
+	if procinfo := c.Runner.Run(ctx, "/bin/launchctl", "procinfo", pid); procinfo.Err == nil {
+		if soft, hard, ok := ParseNOFILELimit(procinfo.Stdout); ok {
+			data.ProcessSoft = soft
+			data.ProcessHard = hard
+		}
+	}
+	return report.Evidence{ID: report.EvidenceDescriptors, Status: report.StatusOK, Summary: fmt.Sprintf("Counted %d numeric descriptors for %s", sample.Count, process), Data: data}
 }
 
-func unavailable(id, summary string) report.Evidence {
+func unavailable(id report.EvidenceID, summary string) report.Evidence {
 	return report.Evidence{ID: id, Status: report.StatusUnavailable, Summary: summary}
 }
 
-func timedOut(id, summary string) report.Evidence {
+func timedOut(id report.EvidenceID, summary string) report.Evidence {
 	return report.Evidence{ID: id, Status: report.StatusTimedOut, Summary: summary, Error: "timed out"}
 }
 
@@ -556,13 +616,4 @@ func dependencyExists(library, executable string, rpaths []string) bool {
 func predicateEscape(value string) string {
 	value = strings.ReplaceAll(value, `\`, `\\`)
 	return strings.ReplaceAll(value, `"`, `\"`)
-}
-
-func sortedKeys(values map[int]bool) []int {
-	keys := make([]int, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Ints(keys)
-	return keys
 }

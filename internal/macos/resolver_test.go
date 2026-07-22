@@ -2,6 +2,7 @@ package macos_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -70,6 +71,49 @@ func TestResolverRanksExactStandardPathBeforeSearch(t *testing.T) {
 	if len(apps) != 1 || apps[0].BundleID != "dev.target" {
 		t.Fatalf("unexpected matches: %#v", apps)
 	}
+}
+
+func TestResolverFallsBackToSpotlightWhenStandardRootsDoNotMatch(t *testing.T) {
+	root := t.TempDir()
+	makeApp(t, filepath.Join(root, "Unrelated.app"), "dev.unrelated")
+	external := filepath.Join(t.TempDir(), "Target.app")
+	makeApp(t, external, "dev.external.target")
+	resolver := macos.Resolver{Runner: spotlightRunner{path: external}, SearchRoots: []string{root}}
+	apps, err := resolver.Resolve(context.Background(), "dev.external.target")
+	if err != nil {
+		t.Fatalf("Resolve returned error: %v", err)
+	}
+	realExternal, err := filepath.EvalSymlinks(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(apps) != 1 || apps[0].Path != realExternal {
+		t.Fatalf("unexpected Spotlight fallback: %#v", apps)
+	}
+}
+
+func TestResolverClassifiesMalformedPlist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Broken.app")
+	if err := os.MkdirAll(filepath.Join(path, "Contents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "Contents", "Info.plist"), []byte("not a plist"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := (macos.Resolver{Runner: platform.ExecRunner{Timeout: time.Second}}).Resolve(context.Background(), path)
+	var resolveErr *macos.ResolveError
+	if !errors.As(err, &resolveErr) || resolveErr.Code != "bundle.invalid" {
+		t.Fatalf("error=%v, want bundle.invalid", err)
+	}
+}
+
+type spotlightRunner struct{ path string }
+
+func (r spotlightRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	if path == "/usr/bin/mdfind" {
+		return platform.Result{Stdout: r.path + "\n"}
+	}
+	return (platform.ExecRunner{Timeout: time.Second}).Run(ctx, path, args...)
 }
 
 func makeApp(t *testing.T, path, bundleID string) {

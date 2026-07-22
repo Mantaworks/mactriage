@@ -3,7 +3,9 @@ package action_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/upsidedly/mactriage/internal/action"
 	"github.com/upsidedly/mactriage/internal/platform"
@@ -30,6 +32,21 @@ func TestRestartSyspolicydVerifiesNewPID(t *testing.T) {
 	}
 	if result.OldPID != 497 || result.NewPID != 812 || !result.Restarted {
 		t.Fatalf("unexpected restart result: %#v", result)
+	}
+}
+
+func TestOpenSecurityActionVerifiesSystemSettings(t *testing.T) {
+	runner := &sequenceRunner{results: []platform.Result{{}, {Stdout: "99\n"}}}
+	_, err := (action.Executor{Runner: runner, PollInterval: time.Millisecond}).Execute(context.Background(), action.OpenSecurity, "")
+	if err != nil || runner.calls != 2 {
+		t.Fatalf("Execute calls=%d error=%v", runner.calls, err)
+	}
+}
+
+func TestActionCatalogContainsPermissionAndFollowup(t *testing.T) {
+	definition, ok := action.Definition(action.RepairSyspolicyd, "/Applications/Example.app")
+	if !ok || !definition.RequiresRoot || len(definition.Command) == 0 || !strings.Contains(definition.Description, "rerun") {
+		t.Fatalf("incomplete action definition: %#v", definition)
 	}
 }
 

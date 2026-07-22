@@ -1,5 +1,7 @@
 # mactriage
 
+`mactriage` supports macOS 13 Ventura and newer on Apple silicon and Intel Macs.
+
 `mactriage` explains why a macOS application will not launch. It combines bundle, code-signing, Gatekeeper, architecture, dependency, launch, crash, unified-log, and file-descriptor evidence into a single ranked diagnosis.
 
 It is intentionally conservative: it does not disable Gatekeeper or SIP, rewrite signatures, reset security databases, recursively remove quarantine attributes, or delete application data.

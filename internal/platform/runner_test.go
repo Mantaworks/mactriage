@@ -35,3 +35,15 @@ func TestExecRunnerBoundsOutput(t *testing.T) {
 		t.Fatalf("unexpected bounded output: %#v", result)
 	}
 }
+
+func TestExecRunnerStreamsCompleteLines(t *testing.T) {
+	r := platform.ExecRunner{MaxOutput: 1024}
+	var lines []string
+	err := r.StreamLines(context.Background(), "/usr/bin/printf", func(line []byte) error {
+		lines = append(lines, string(line))
+		return nil
+	}, "one\ntwo\n")
+	if err != nil || len(lines) != 2 || lines[0] != "one" || lines[1] != "two" {
+		t.Fatalf("StreamLines lines=%#v error=%v", lines, err)
+	}
+}

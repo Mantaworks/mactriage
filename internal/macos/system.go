@@ -3,8 +3,6 @@ package macos
 import (
 	"context"
 	"fmt"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/upsidedly/mactriage/internal/report"
@@ -27,7 +25,11 @@ func (c Collector) System(ctx context.Context, top int, privileged bool) (report
 		r.Evidence = append(r.Evidence, unavailable("logs", "Recent resource-error logs are unavailable"))
 	} else {
 		summary := ParseLogEvents([]byte(logResult.Stdout))
-		r.Evidence = append(r.Evidence, report.Evidence{ID: "logs", Status: report.StatusOK, Summary: "Recent resource-error logs inspected", Data: map[string]any{"emfile": summary.EMFILE, "enfile": summary.ENFILE, "sec_static_code": summary.SecStaticCode}})
+		status, text := report.StatusOK, "Recent resource-error logs inspected"
+		if logResult.Truncated {
+			status, text = report.StatusPartial, "Recent resource-error logs inspected (bounded output was truncated)"
+		}
+		r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidenceLogs, Status: status, Summary: text, Data: report.LogsData{EMFILE: summary.EMFILE, ENFILE: summary.ENFILE, SecStaticCode: summary.SecStaticCode}})
 	}
 	c.emit("logs", "Check recent resource errors", string(r.Evidence[len(r.Evidence)-1].Status), time.Since(started))
 
@@ -47,28 +49,18 @@ func (c Collector) System(ctx context.Context, top int, privileged bool) (report
 				if len(counts) > top {
 					counts = counts[:top]
 				}
-				rows := make([]map[string]any, 0, len(counts))
+				rows := make([]report.ProcessDescriptorSummary, 0, len(counts))
 				for _, count := range counts {
-					rows = append(rows, map[string]any{"pid": count.PID, "command": count.Command, "count": count.Count})
+					rows = append(rows, report.ProcessDescriptorSummary{PID: count.PID, Command: count.Command, Count: count.Count})
 				}
-				r.Evidence = append(r.Evidence, report.Evidence{ID: "top_processes", Status: report.StatusOK, Summary: fmt.Sprintf("Aggregated the top %d descriptor consumers", len(rows)), Data: map[string]any{"processes": rows, "truncated": result.Truncated}})
+				status, text := report.StatusOK, fmt.Sprintf("Aggregated the top %d descriptor consumers", len(rows))
+				if result.Truncated {
+					status, text = report.StatusPartial, text+" (bounded output was truncated)"
+				}
+				r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidenceTopProcesses, Status: status, Summary: text, Data: report.TopProcessesData{Processes: rows, Truncated: result.Truncated}})
 			}
 			c.emit("top_processes", "Aggregate descriptor consumers", string(r.Evidence[len(r.Evidence)-1].Status), time.Since(started))
 		}
 	}
 	return r, nil
-}
-
-func TopDescriptorCounts(data []byte, limit int) []ProcessDescriptorCount {
-	counts := ParseProcessDescriptorCounts(data)
-	sort.SliceStable(counts, func(i, j int) bool {
-		if counts[i].Count == counts[j].Count {
-			return strings.Compare(counts[i].Command, counts[j].Command) < 0
-		}
-		return counts[i].Count > counts[j].Count
-	})
-	if limit > 0 && len(counts) > limit {
-		return counts[:limit]
-	}
-	return counts
 }

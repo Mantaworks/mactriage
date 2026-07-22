@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -24,6 +26,10 @@ type Result struct {
 
 type Runner interface {
 	Run(context.Context, string, ...string) Result
+}
+
+type LineStreamer interface {
+	StreamLines(context.Context, string, func([]byte) error, ...string) error
 }
 
 type ExecRunner struct {
@@ -72,6 +78,56 @@ func (r ExecRunner) Run(parent context.Context, path string, args ...string) Res
 		result.ExitCode = -1
 	}
 	return result
+}
+
+func (r ExecRunner) StreamLines(ctx context.Context, path string, consume func([]byte) error, args ...string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("executable path must be absolute: %q", path)
+	}
+	if consume == nil {
+		return errors.New("line stream requires a consumer")
+	}
+	if r.Verbose != nil {
+		r.Verbose(path + " " + joinArgs(args))
+	}
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	limit := r.MaxOutput
+	if limit <= 0 {
+		limit = 1 << 20
+	}
+	stderr := newLimitedBuffer(limit)
+	cmd.Stderr = stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
+	for scanner.Scan() {
+		line := append([]byte(nil), scanner.Bytes()...)
+		if err := consume(line); err != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return err
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return err
+	}
+	err = cmd.Wait()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err != nil {
+		return fmt.Errorf("stream command failed: %w: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
 }
 
 func joinArgs(args []string) string {

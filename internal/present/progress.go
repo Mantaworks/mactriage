@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -173,17 +172,4 @@ func muted(text string, color bool) string {
 		return text
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(text)
-}
-
-func OrderedEvents(events map[string]ProgressEvent) []ProgressEvent {
-	keys := make([]string, 0, len(events))
-	for key := range events {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	result := make([]ProgressEvent, 0, len(keys))
-	for _, key := range keys {
-		result = append(result, events[key])
-	}
-	return result
 }
