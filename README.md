@@ -14,13 +14,15 @@ It is intentionally conservative: it does not disable Gatekeeper or SIP, rewrite
 
 ## Install
 
-Install the latest signed release on Apple silicon or Intel with Homebrew:
+Install with Homebrew on Apple silicon or Intel:
 
 ```sh
-brew install --cask Mantaworks/tap/mactriage
+brew install Mantaworks/tap/mactriage
 ```
 
-Or use the checksum-verifying installer directly:
+Homebrew downloads the tagged source and builds `mactriage` locally. No Apple Developer membership or Gatekeeper bypass is required.
+
+Alternatively, install a prebuilt archive with the checksum-verifying installer:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -fsSL https://raw.githubusercontent.com/Mantaworks/mactriage/main/install.sh | sh
@@ -39,7 +41,7 @@ make build
 ./bin/mactriage version
 ```
 
-Release artifacts are built for Apple silicon and Intel Macs, signed with a Developer ID certificate, notarized by Apple, and accompanied by checksums and SBOMs.
+Prebuilt release archives are available for Apple silicon and Intel Macs with checksums and SBOMs. They are not Apple-notarized; Homebrew is the recommended installation path because its formula builds locally from tagged source.
 
 ## Diagnose an application
 
