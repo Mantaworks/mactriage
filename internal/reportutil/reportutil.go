@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Mantaworks/mactriage/internal/knowledge"
 	"github.com/Mantaworks/mactriage/internal/report"
 )
 
@@ -245,8 +246,8 @@ func evidenceData(r report.Report) map[report.EvidenceID]report.EvidencePayload 
 }
 
 func newIntelOnlyApps(before, after report.Report) []string {
-	beforeIntel := findingSubjects(before.Findings, "scan.intel_only")
-	afterIntel := findingSubjects(after.Findings, "scan.intel_only")
+	beforeIntel := findingSubjects(before.Findings, knowledge.CodeScanIntelOnly)
+	afterIntel := findingSubjects(after.Findings, knowledge.CodeScanIntelOnly)
 	var added []string
 	for name := range afterIntel {
 		if !beforeIntel[name] {

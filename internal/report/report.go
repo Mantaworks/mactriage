@@ -289,7 +289,8 @@ type CPUData struct {
 
 type ServicesData struct {
 	evidenceMarker
-	Running map[string]bool `json:"running"`
+	Running  map[string]bool   `json:"running"`
+	Statuses map[string]Status `json:"statuses"`
 }
 
 type UpdatesData struct {

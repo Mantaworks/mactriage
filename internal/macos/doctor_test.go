@@ -2,6 +2,7 @@ package macos_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/Mantaworks/mactriage/internal/macos"
@@ -39,6 +40,26 @@ func TestDoctorOnlyCollectsSelectedChecks(t *testing.T) {
 	if len(r.Evidence) != 1 || r.Evidence[0].ID != report.EvidenceStorage {
 		t.Fatalf("evidence=%#v", r.Evidence)
 	}
+}
+
+func TestDoctorMarksUnavailableServiceProbesPartial(t *testing.T) {
+	r, err := (macos.Doctor{Runner: unavailableServiceRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Only: []string{"services"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := evidenceData[report.ServicesData](t, r, report.EvidenceServices)
+	if r.Evidence[0].Status != report.StatusPartial || data.Statuses["syspolicyd"] != report.StatusUnavailable {
+		t.Fatalf("service probe failure became a missing service: %#v", r.Evidence[0])
+	}
+}
+
+type unavailableServiceRunner struct{}
+
+func (unavailableServiceRunner) Run(_ context.Context, path string, _ ...string) platform.Result {
+	if path == "/usr/bin/pgrep" {
+		return platform.Result{ExitCode: -1, Err: errors.New("pgrep unavailable")}
+	}
+	return platform.Result{}
 }
 
 func evidenceData[T any](t *testing.T, r report.Report, id report.EvidenceID) T {

@@ -66,7 +66,10 @@ func (e Executor) RelaunchApp(ctx context.Context, target, processName string, a
 				if err := e.signal(ctx, "-KILL", remaining); err != nil {
 					return result, fmt.Errorf("force application termination: %w", err)
 				}
-				if !e.waitGone(ctx, processName, approvedPIDs) {
+				if err := e.waitGone(ctx, processName, approvedPIDs); err != nil {
+					if !errors.Is(err, errVerificationDeadline) {
+						return result, fmt.Errorf("verify forced application termination: %w", err)
+					}
 					return result, errors.New("application remained running after SIGKILL")
 				}
 			}
@@ -74,12 +77,18 @@ func (e Executor) RelaunchApp(ctx context.Context, target, processName string, a
 			if err := e.signal(ctx, "-TERM", approvedPIDs); err != nil {
 				return result, fmt.Errorf("request application termination: %w", err)
 			}
-			if !e.waitGone(ctx, processName, approvedPIDs) {
+			if err := e.waitGone(ctx, processName, approvedPIDs); err != nil {
+				if !errors.Is(err, errVerificationDeadline) {
+					return result, fmt.Errorf("verify application termination: %w", err)
+				}
 				return result, ErrProcessStillRunning
 			}
 		}
 	}
-	preOpenPIDs, _ := e.pidsNamed(ctx, processName)
+	preOpenPIDs, err := e.pidsNamed(ctx, processName)
+	if err != nil {
+		return result, fmt.Errorf("snapshot processes before reopening: %w", err)
+	}
 	if opened := e.Runner.Run(ctx, "/usr/bin/open", "-a", target); opened.Err != nil {
 		return result, fmt.Errorf("reopen application: %w", opened.Err)
 	}
@@ -98,7 +107,10 @@ func (e Executor) RelaunchApp(ctx context.Context, target, processName string, a
 		return result, ctx.Err()
 	case <-timer.C:
 	}
-	stillRunning, _ := e.pidsNamed(ctx, processName)
+	stillRunning, err := e.pidsNamed(ctx, processName)
+	if err != nil {
+		return result, fmt.Errorf("verify relaunched application survival: %w", err)
+	}
 	result.Survived = len(intersectPIDs(stillRunning, newPIDs)) > 0
 	if !result.Survived {
 		return result, errors.New("application exited during relaunch verification")
@@ -132,23 +144,23 @@ func (e Executor) pidsNamed(ctx context.Context, processName string) ([]int, err
 	return pids, nil
 }
 
-func (e Executor) waitGone(ctx context.Context, processName string, approvedPIDs []int) bool {
+func (e Executor) waitGone(ctx context.Context, processName string, approvedPIDs []int) error {
 	timeout := e.TerminateTimeout
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	_, err := pollUntil(ctx, e.PollInterval, timeout, func() (struct{}, bool) {
-		pids, _ := e.pidsNamed(ctx, processName)
-		return struct{}{}, len(intersectPIDs(pids, approvedPIDs)) == 0
+	_, err := pollUntil(ctx, e.PollInterval, timeout, func() (struct{}, bool, error) {
+		pids, probeErr := e.pidsNamed(ctx, processName)
+		return struct{}{}, len(intersectPIDs(pids, approvedPIDs)) == 0, probeErr
 	})
-	return err == nil
+	return err
 }
 
 func (e Executor) waitAppear(ctx context.Context, processName string, excludedPIDs []int, timeout time.Duration) ([]int, error) {
-	pids, err := pollUntil(ctx, e.PollInterval, timeout, func() ([]int, bool) {
-		pids, _ := e.pidsNamed(ctx, processName)
+	pids, err := pollUntil(ctx, e.PollInterval, timeout, func() ([]int, bool, error) {
+		pids, probeErr := e.pidsNamed(ctx, processName)
 		pids = excludePIDs(pids, excludedPIDs)
-		return pids, len(pids) > 0
+		return pids, len(pids) > 0, probeErr
 	})
 	if err != nil {
 		if ctx.Err() != nil {
@@ -211,9 +223,15 @@ func (e Executor) RestartSyspolicyd(ctx context.Context) (RestartResult, error) 
 	if result := e.Runner.Run(ctx, "/usr/bin/killall", "syspolicyd"); result.Err != nil {
 		return RestartResult{OldPID: oldPID}, fmt.Errorf("terminate syspolicyd: %w", result.Err)
 	}
-	newPID, waitErr := pollUntil(ctx, e.PollInterval, 10*time.Second, func() (int, bool) {
+	newPID, waitErr := pollUntil(ctx, e.PollInterval, 10*time.Second, func() (int, bool, error) {
 		newPID, pidErr := e.pid(ctx)
-		return newPID, pidErr == nil && newPID != 0 && newPID != oldPID
+		if pidErr != nil {
+			if errors.Is(pidErr, errProcessNotFound) {
+				return 0, false, nil
+			}
+			return 0, false, pidErr
+		}
+		return newPID, newPID != 0 && newPID != oldPID, nil
 	})
 	if waitErr == nil {
 		return RestartResult{OldPID: oldPID, NewPID: newPID, Restarted: true}, nil
@@ -264,13 +282,21 @@ func excludePIDs(current, excluded []int) []int {
 	return remaining
 }
 
-func pollUntil[T any](ctx context.Context, interval, timeout time.Duration, probe func() (T, bool)) (T, error) {
+var errVerificationDeadline = errors.New("verification deadline exceeded")
+var errProcessNotFound = errors.New("process not found")
+
+func pollUntil[T any](ctx context.Context, interval, timeout time.Duration, probe func() (T, bool, error)) (T, error) {
 	if interval <= 0 {
 		interval = 250 * time.Millisecond
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if value, ready := probe(); ready {
+		value, ready, err := probe()
+		if err != nil {
+			var zero T
+			return zero, err
+		}
+		if ready {
 			return value, nil
 		}
 		timer := time.NewTimer(interval)
@@ -283,21 +309,16 @@ func pollUntil[T any](ctx context.Context, interval, timeout time.Duration, prob
 		}
 	}
 	var zero T
-	return zero, errors.New("verification deadline exceeded")
+	return zero, errVerificationDeadline
 }
 
 func (e Executor) pid(ctx context.Context) (int, error) {
-	result := e.Runner.Run(ctx, "/usr/bin/pgrep", "-x", "syspolicyd")
-	if result.Err != nil {
-		return 0, result.Err
-	}
-	fields := strings.Fields(result.Stdout)
-	if len(fields) == 0 {
-		return 0, errors.New("process not found")
-	}
-	pid, err := strconv.Atoi(fields[0])
+	pids, err := e.pidsNamed(ctx, "syspolicyd")
 	if err != nil {
-		return 0, fmt.Errorf("invalid PID %q", fields[0])
+		return 0, err
 	}
-	return pid, nil
+	if len(pids) == 0 {
+		return 0, errProcessNotFound
+	}
+	return pids[0], nil
 }

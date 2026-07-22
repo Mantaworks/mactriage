@@ -100,6 +100,36 @@ func TestForcedRelaunchSignalsOnlyStillRunningApprovedPIDs(t *testing.T) {
 	}
 }
 
+func TestRelaunchFailsClosedWhenProcessVerificationIsUnavailable(t *testing.T) {
+	runner := &sequenceRunner{results: []platform.Result{
+		{},
+		{ExitCode: -1, Err: errors.New("pgrep unavailable")},
+	}}
+	executor := action.Executor{Runner: runner, PollInterval: time.Millisecond, TerminateTimeout: 10 * time.Millisecond}
+	_, err := executor.RelaunchApp(context.Background(), "/Applications/Example.app", "Example", []int{10}, false, time.Millisecond)
+	if err == nil || errors.Is(err, action.ErrProcessStillRunning) {
+		t.Fatalf("verification failure was not preserved: %v", err)
+	}
+	for _, command := range runner.commands {
+		if strings.HasPrefix(command, "/usr/bin/open ") {
+			t.Fatalf("application reopened after failed verification: %#v", runner.commands)
+		}
+	}
+}
+
+func TestRelaunchFailsClosedWhenPreOpenSnapshotIsUnavailable(t *testing.T) {
+	runner := &sequenceRunner{results: []platform.Result{
+		{},
+		{Stdout: "99\n"},
+		{ExitCode: -1, Err: errors.New("pgrep unavailable")},
+	}}
+	executor := action.Executor{Runner: runner, PollInterval: time.Millisecond, TerminateTimeout: 10 * time.Millisecond}
+	_, err := executor.RelaunchApp(context.Background(), "/Applications/Example.app", "Example", []int{10}, false, time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "snapshot processes") {
+		t.Fatalf("pre-open verification failure was hidden: %v", err)
+	}
+}
+
 type sequenceRunner struct {
 	results  []platform.Result
 	calls    int

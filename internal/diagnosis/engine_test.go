@@ -139,7 +139,7 @@ func TestAnalyzeDoctorRanksEverydayHealthProblems(t *testing.T) {
 		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 5}},
 		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{FreePercent: 4, SwapUsedBytes: 6 << 30}},
 		{ID: report.EvidenceCPU, Status: report.StatusOK, Data: report.CPUData{LogicalCores: 4, LoadOne: 9, HighestPercent: 97, HighestProcess: "Example", ProcessStates: map[string]int{"D": 1}}},
-		{ID: report.EvidenceServices, Status: report.StatusOK, Data: report.ServicesData{Running: map[string]bool{"syspolicyd": false, "trustd": true}}},
+		{ID: report.EvidenceServices, Status: report.StatusOK, Data: report.ServicesData{Running: map[string]bool{"syspolicyd": false, "trustd": true}, Statuses: map[string]report.Status{"syspolicyd": report.StatusOK, "trustd": report.StatusOK}}},
 		{ID: report.EvidenceUpdates, Status: report.StatusOK, Data: report.UpdatesData{Available: true}},
 		{ID: report.EvidenceRecentCrashes, Status: report.StatusOK, Data: report.RecentCrashesData{Count: 12}},
 		{ID: report.EvidenceStartupItems, Status: report.StatusOK, Data: report.StartupItemsData{Count: 120}},

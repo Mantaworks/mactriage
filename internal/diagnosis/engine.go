@@ -128,7 +128,7 @@ func Analyze(r report.Report) report.Report {
 	if hasServices {
 		var missing []string
 		for name, running := range services.Running {
-			if !running {
+			if services.Statuses[name] == report.StatusOK && !running {
 				missing = append(missing, name)
 			}
 		}
