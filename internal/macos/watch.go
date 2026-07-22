@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,17 +15,13 @@ import (
 )
 
 type WatchOptions struct {
-	Target               string
-	Interval             time.Duration
-	Window               time.Duration
-	WarnGrowth           int
-	Duration             time.Duration
-	IncludePaths         bool
-	CPUThreshold         float64
-	MemoryThreshold      uint64
-	ThreadsThreshold     int
-	SocketsThreshold     int
-	MinMemoryFreePercent float64
+	Target       string
+	Interval     time.Duration
+	Window       time.Duration
+	WarnGrowth   int
+	Duration     time.Duration
+	IncludePaths bool
+	Thresholds   diagnosis.ResourceThresholds
 }
 
 type WatchEvent struct {
@@ -77,20 +72,20 @@ func (w Watcher) Run(ctx context.Context, opts WatchOptions, emit func(WatchEven
 	if opts.WarnGrowth <= 0 {
 		opts.WarnGrowth = 150
 	}
-	if opts.CPUThreshold <= 0 {
-		opts.CPUThreshold = 80
+	if opts.Thresholds.CPUPercent <= 0 {
+		opts.Thresholds.CPUPercent = 80
 	}
-	if opts.MemoryThreshold == 0 {
-		opts.MemoryThreshold = 4 << 30
+	if opts.Thresholds.MemoryBytes == 0 {
+		opts.Thresholds.MemoryBytes = 4 << 30
 	}
-	if opts.ThreadsThreshold <= 0 {
-		opts.ThreadsThreshold = 500
+	if opts.Thresholds.Threads <= 0 {
+		opts.Thresholds.Threads = 500
 	}
-	if opts.SocketsThreshold <= 0 {
-		opts.SocketsThreshold = 1000
+	if opts.Thresholds.Sockets <= 0 {
+		opts.Thresholds.Sockets = 1000
 	}
-	if opts.MinMemoryFreePercent <= 0 {
-		opts.MinMemoryFreePercent = 10
+	if opts.Thresholds.MinMemoryFree <= 0 {
+		opts.Thresholds.MinMemoryFree = 10
 	}
 	now := w.Now
 	if now == nil {
@@ -156,12 +151,8 @@ func (w Watcher) Run(ctx context.Context, opts WatchOptions, emit func(WatchEven
 					}
 				}
 				restartTimes = append(kept, stamp)
-				severity := report.Info
-				message := fmt.Sprintf("process restarted (PID %d → %d)", lastPID, pid)
-				if len(restartTimes) >= 3 {
-					severity = report.Warning
-					message = fmt.Sprintf("process restart loop detected: %d restarts within %s", len(restartTimes), opts.Window)
-				}
+				severity, message := diagnosis.ClassifyRestart(len(restartTimes), opts.Window)
+				message += fmt.Sprintf(" (PID %d → %d)", lastPID, pid)
 				if err := emit(WatchEvent{SchemaVersion: report.SchemaVersion, Type: "restart", Timestamp: stamp, Target: opts.Target, PID: pid, Severity: severity, Message: message, RestartCount: len(restartTimes)}); err != nil {
 					return err
 				}
@@ -226,8 +217,8 @@ func (w Watcher) Run(ctx context.Context, opts WatchOptions, emit func(WatchEven
 				resources := w.resources(ctx, pid)
 				resources.Sockets = socketCount(sample.ByType)
 				resources.MemoryFreePercent = w.memoryFreePercent(ctx)
-				severity, message := diagnosis.ClassifyWatch(diagnosis.WatchFacts{Growth: growth, GrowthRate: growthRate, WarnGrowth: opts.WarnGrowth, Window: opts.Window, EMFILE: logs.EMFILE, ENFILE: logs.ENFILE, ProcessPressure: processPressure, GlobalPressure: globalPressure, CPUPercent: resources.CPU, CPUThreshold: opts.CPUThreshold, RSSBytes: resources.RSS, MemoryThreshold: opts.MemoryThreshold, Threads: resources.Threads, ThreadsThreshold: opts.ThreadsThreshold, Sockets: resources.Sockets, SocketsThreshold: opts.SocketsThreshold, MemoryFreePercent: resources.MemoryFreePercent, MinMemoryFreePercent: opts.MinMemoryFreePercent})
-				if err := emit(WatchEvent{SchemaVersion: report.SchemaVersion, Type: "sample", Timestamp: stamp, Target: opts.Target, PID: pid, DescriptorCount: sample.Count, Growth: growth, GrowthRate: growthRate, WindowSeconds: int(opts.Window.Seconds()), Severity: severity, Message: message, ByType: sample.ByType, ByPath: paths, CPUPercent: resources.CPU, RSSBytes: resources.RSS, Threads: resources.Threads, SocketCount: resources.Sockets, DiskReadBytes: resources.DiskRead, DiskWriteBytes: resources.DiskWrite, MemoryFreePercent: resources.MemoryFreePercent}); err != nil {
+				severity, message := diagnosis.ClassifyWatch(diagnosis.WatchFacts{Growth: growth, GrowthRate: growthRate, WarnGrowth: opts.WarnGrowth, Window: opts.Window, EMFILE: logs.EMFILE, ENFILE: logs.ENFILE, ProcessPressure: processPressure, GlobalPressure: globalPressure, Resources: resources, Thresholds: opts.Thresholds})
+				if err := emit(WatchEvent{SchemaVersion: report.SchemaVersion, Type: "sample", Timestamp: stamp, Target: opts.Target, PID: pid, DescriptorCount: sample.Count, Growth: growth, GrowthRate: growthRate, WindowSeconds: int(opts.Window.Seconds()), Severity: severity, Message: message, ByType: sample.ByType, ByPath: paths, CPUPercent: resources.CPUPercent, RSSBytes: resources.RSSBytes, Threads: resources.Threads, SocketCount: resources.Sockets, MemoryFreePercent: resources.MemoryFreePercent}); err != nil {
 					return err
 				}
 			}
@@ -243,30 +234,19 @@ func (w Watcher) Run(ctx context.Context, opts WatchOptions, emit func(WatchEven
 	}
 }
 
-type watchedResources struct {
-	CPU               float64
-	RSS               uint64
-	Threads           int
-	Sockets           int
-	DiskRead          uint64
-	DiskWrite         uint64
-	MemoryFreePercent float64
-}
-
-func (w Watcher) resources(ctx context.Context, pid int) watchedResources {
-	result := w.Runner.Run(ctx, "/bin/ps", "-p", strconv.Itoa(pid), "-o", "%cpu=", "-o", "rss=", "-o", "pagein=")
+func (w Watcher) resources(ctx context.Context, pid int) diagnosis.ResourceSample {
+	result := w.Runner.Run(ctx, "/bin/ps", "-p", strconv.Itoa(pid), "-o", "%cpu=", "-o", "rss=")
 	if result.Err != nil {
-		return watchedResources{}
+		return diagnosis.ResourceSample{}
 	}
 	fields := strings.Fields(result.Stdout)
-	if len(fields) < 3 {
-		return watchedResources{}
+	if len(fields) < 2 {
+		return diagnosis.ResourceSample{}
 	}
 	cpu, _ := strconv.ParseFloat(strings.ReplaceAll(fields[0], ",", "."), 64)
 	rssKB, _ := strconv.ParseUint(fields[1], 10, 64)
-	pageins, _ := strconv.ParseUint(fields[2], 10, 64)
 	threads := (ProcessInspector{Runner: w.Runner}).threadCount(ctx, pid)
-	return watchedResources{CPU: cpu, RSS: rssKB * 1024, Threads: threads, DiskRead: pageins * uint64(os.Getpagesize())}
+	return diagnosis.ResourceSample{CPUPercent: cpu, RSSBytes: rssKB * 1024, Threads: threads}
 }
 
 func (w Watcher) memoryFreePercent(ctx context.Context) float64 {

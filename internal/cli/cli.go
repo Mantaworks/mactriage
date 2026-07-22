@@ -67,16 +67,12 @@ func New(config Config) *cobra.Command {
 				return nil
 			}
 			present.GettingStarted(app.config.Err, app.color())
-			choice, err := present.Home(app.opts.accessible)
+			choice, err := present.Home(app.opts.accessible || app.opts.plain)
 			if err != nil {
 				return err
 			}
-			args := []string{choice.Task}
-			if choice.Target != "" {
-				args = append(args, choice.Target)
-			}
 			selected := New(app.config)
-			selected.SetArgs(args)
+			selected.SetArgs(homeArgs(app.opts, choice))
 			if err := selected.ExecuteContext(cmd.Context()); err != nil {
 				return err
 			}
@@ -364,10 +360,8 @@ func (a *application) watchCommand() *cobra.Command {
 	var interval, window, duration time.Duration
 	var warnGrowth int
 	var includePaths bool
-	var cpuThreshold float64
-	var minMemoryFreePercent float64
+	var thresholds diagnosis.ResourceThresholds
 	var memoryThresholdMiB uint64
-	var threadsThreshold, socketsThreshold int
 	cmd := &cobra.Command{
 		Use:   "watch [process-or-pid]",
 		Short: "Watch a process for descriptor growth and resource errors",
@@ -387,7 +381,8 @@ func (a *application) watchCommand() *cobra.Command {
 					return nil
 				}
 			}
-			if interval < 250*time.Millisecond || window < interval || warnGrowth < 1 || duration < 0 || cpuThreshold <= 0 || memoryThresholdMiB == 0 || minMemoryFreePercent <= 0 || minMemoryFreePercent > 100 || threadsThreshold < 1 || socketsThreshold < 1 {
+			thresholds.MemoryBytes = memoryThresholdMiB << 20
+			if interval < 250*time.Millisecond || window < interval || warnGrowth < 1 || duration < 0 || thresholds.CPUPercent <= 0 || memoryThresholdMiB == 0 || thresholds.MinMemoryFree <= 0 || thresholds.MinMemoryFree > 100 || thresholds.Threads < 1 || thresholds.Sockets < 1 {
 				return errors.New("watch requires interval >= 250ms, window >= interval, positive warning growth, and non-negative duration")
 			}
 			watcher := macos.Watcher{Runner: a.runner}
@@ -426,7 +421,7 @@ func (a *application) watchCommand() *cobra.Command {
 				present.HumanWatch(a.config.Out, event.Timestamp.Local().Format("15:04:05"), event.Severity, message, a.color())
 				return nil
 			}
-			err = watcher.Run(cmd.Context(), macos.WatchOptions{Target: target, Interval: interval, Window: window, WarnGrowth: warnGrowth, Duration: duration, IncludePaths: includePaths, CPUThreshold: cpuThreshold, MemoryThreshold: memoryThresholdMiB << 20, ThreadsThreshold: threadsThreshold, SocketsThreshold: socketsThreshold, MinMemoryFreePercent: minMemoryFreePercent}, emit)
+			err = watcher.Run(cmd.Context(), macos.WatchOptions{Target: target, Interval: interval, Window: window, WarnGrowth: warnGrowth, Duration: duration, IncludePaths: includePaths, Thresholds: thresholds}, emit)
 			if stream != nil {
 				if commitErr := stream.Commit(); commitErr != nil && err == nil {
 					err = commitErr
@@ -448,11 +443,11 @@ func (a *application) watchCommand() *cobra.Command {
 	cmd.Flags().IntVar(&warnGrowth, "warn-growth", 150, "warn after this many additional descriptors within the window")
 	cmd.Flags().DurationVar(&duration, "duration", 0, "stop after this duration (zero runs until interrupted)")
 	cmd.Flags().BoolVar(&includePaths, "include-paths", false, "include target-process path aggregation in watch events")
-	cmd.Flags().Float64Var(&cpuThreshold, "cpu-threshold", 80, "warn at this process CPU percentage")
+	cmd.Flags().Float64Var(&thresholds.CPUPercent, "cpu-threshold", 80, "warn at this process CPU percentage")
 	cmd.Flags().Uint64Var(&memoryThresholdMiB, "memory-threshold-mib", 4096, "warn at this resident-memory size in MiB")
-	cmd.Flags().Float64Var(&minMemoryFreePercent, "memory-free-threshold", 10, "warn when system free memory reaches this percentage")
-	cmd.Flags().IntVar(&threadsThreshold, "threads-threshold", 500, "warn at this thread count")
-	cmd.Flags().IntVar(&socketsThreshold, "sockets-threshold", 1000, "warn at this socket count")
+	cmd.Flags().Float64Var(&thresholds.MinMemoryFree, "memory-free-threshold", 10, "warn when system free memory reaches this percentage")
+	cmd.Flags().IntVar(&thresholds.Threads, "threads-threshold", 500, "warn at this thread count")
+	cmd.Flags().IntVar(&thresholds.Sockets, "sockets-threshold", 1000, "warn at this socket count")
 	return cmd
 }
 

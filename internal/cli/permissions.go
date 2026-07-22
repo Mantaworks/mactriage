@@ -2,13 +2,11 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Mantaworks/mactriage/internal/action"
 	"github.com/Mantaworks/mactriage/internal/diagnosis"
 	"github.com/Mantaworks/mactriage/internal/macos"
-	"github.com/Mantaworks/mactriage/internal/present"
 	"github.com/Mantaworks/mactriage/internal/report"
 	"github.com/spf13/cobra"
 )
@@ -44,26 +42,23 @@ func (a *application) permissionsCommand() *cobra.Command {
 			if err := a.renderReport(r); err != nil {
 				return err
 			}
-			if a.canPrompt() && !a.opts.json && hasAction(r, action.OpenSecurity) {
-				spec, _ := action.Lookup(action.OpenSecurity, selected.Path)
-				description := spec.Definition.Description + "\nCommand: " + strings.Join(spec.Definition.Command, " ") + "\nDefault: No."
-				approved, confirmErr := present.Confirm(spec.Definition.Title+"?", description, a.opts.accessible)
-				if confirmErr != nil {
-					return confirmErr
+			if a.canPrompt() && !a.opts.json {
+				rechecked, actionErr := a.offerReportActions(cmd.Context(), selected.Path, r, func(_ action.RecheckMode) (*report.Report, error) {
+					updated, inspectErr := inspector.Inspect(cmd.Context(), selected, lookback)
+					if inspectErr != nil {
+						return nil, inspectErr
+					}
+					updated = diagnosis.Analyze(updated)
+					if renderErr := a.renderReport(updated); renderErr != nil {
+						return nil, renderErr
+					}
+					return &updated, nil
+				})
+				if actionErr != nil {
+					return actionErr
 				}
-				if approved {
-					if _, err := (action.Executor{Runner: a.runner}).Execute(cmd.Context(), action.OpenSecurity, selected.Path); err != nil {
-						return err
-					}
-					fmt.Fprintln(a.config.Err, "Privacy & Security opened. No permission was changed. Rechecking evidence…")
-					r, err = inspector.Inspect(cmd.Context(), selected, lookback)
-					if err != nil {
-						return err
-					}
-					r = diagnosis.Analyze(r)
-					if err := a.renderReport(r); err != nil {
-						return err
-					}
+				if rechecked != nil {
+					r = *rechecked
 				}
 			}
 			a.setExit(cmd, r.ExitCode())
@@ -72,13 +67,4 @@ func (a *application) permissionsCommand() *cobra.Command {
 	}
 	cmd.Flags().DurationVar(&lookback, "lookback", 10*time.Minute, "privacy-log lookback window")
 	return cmd
-}
-
-func hasAction(r report.Report, id report.ActionID) bool {
-	for _, available := range r.Actions {
-		if available.ID == id {
-			return true
-		}
-	}
-	return false
 }

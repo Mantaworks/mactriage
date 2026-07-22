@@ -179,6 +179,14 @@ func TestNoArgumentsShowsFriendlyGettingStartedInsteadOfUsage(t *testing.T) {
 	}
 }
 
+func TestNoArgumentsCanRenderColorfulGettingStartedPanel(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: systemRunner{}}, []string{"--color", "always"})
+	if code != 0 || !strings.Contains(out.String(), "\x1b[") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+}
+
 func TestJSONRepairNeverMutates(t *testing.T) {
 	var out, errOut bytes.Buffer
 	runner := &countingRunner{}

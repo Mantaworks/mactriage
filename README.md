@@ -140,7 +140,7 @@ mactriage watch syspolicyd --interval 5s --window 60s
 mactriage watch 497 --duration 2m --json
 ```
 
-`system --top` retains aggregate PID, process-name, and numeric-descriptor counts; it does not export paths opened by unrelated processes. `watch` follows daemon PID changes and reports descriptor growth, CPU, resident memory, threads, sockets, and available cumulative disk-read information. Its warning thresholds are configurable:
+`system --top` retains aggregate PID, process-name, and numeric-descriptor counts; it does not export paths opened by unrelated processes. `watch` follows daemon PID changes and reports descriptor growth, CPU, resident memory, threads, and sockets. Disk byte counters are emitted only when macOS supplies an exact process-level source; page faults are never presented as disk I/O. Its warning thresholds are configurable:
 
 ```sh
 mactriage watch Discord \

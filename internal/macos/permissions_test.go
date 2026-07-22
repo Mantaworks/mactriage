@@ -25,6 +25,27 @@ func TestPermissionInspectionReportsOnlyExplicitCorrelatedDenials(t *testing.T) 
 	}
 }
 
+func TestPermissionInspectionMarksEntitlementTimeoutPartial(t *testing.T) {
+	app := macos.App{Name: "Example", BundleID: "com.example.App", Path: "/Applications/Example.app"}
+	r, err := (macos.PermissionInspector{Runner: entitlementTimeoutRunner{}}).Inspect(context.Background(), app, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = diagnosis.Analyze(r)
+	if r.Completeness != "partial" || r.Evidence[0].Status != "partial" {
+		t.Fatalf("report=%#v", r)
+	}
+}
+
+type entitlementTimeoutRunner struct{ permissionRunner }
+
+func (entitlementTimeoutRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	if path == "/usr/bin/codesign" {
+		return platform.Result{TimedOut: true, Err: context.DeadlineExceeded}
+	}
+	return (permissionRunner{}).Run(ctx, path, args...)
+}
+
 type permissionRunner struct{}
 
 func (permissionRunner) Run(_ context.Context, path string, args ...string) platform.Result {

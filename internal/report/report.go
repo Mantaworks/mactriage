@@ -225,9 +225,10 @@ type PermissionObservation struct {
 
 type PermissionsData struct {
 	evidenceMarker
-	BundleID string                  `json:"bundle_id"`
-	Declared []string                `json:"declared,omitempty"`
-	Denials  []PermissionObservation `json:"denials,omitempty"`
+	BundleID           string                  `json:"bundle_id"`
+	EntitlementsStatus Status                  `json:"entitlements_status"`
+	Declared           []string                `json:"declared,omitempty"`
+	Denials            []PermissionObservation `json:"denials,omitempty"`
 }
 
 type ScannedApp struct {
@@ -235,12 +236,14 @@ type ScannedApp struct {
 	Name               string   `json:"name"`
 	BundleID           string   `json:"bundle_id,omitempty"`
 	Version            string   `json:"version,omitempty"`
+	BundleReadable     bool     `json:"bundle_readable"`
 	Architectures      []string `json:"architectures,omitempty"`
+	ArchitectureStatus Status   `json:"architecture_status"`
 	ExecutablePresent  bool     `json:"executable_present"`
 	ExecutableRunnable bool     `json:"executable_runnable"`
 	SignatureValid     *bool    `json:"signature_valid,omitempty"`
+	SignatureStatus    Status   `json:"signature_status"`
 	OSSupported        *bool    `json:"os_supported,omitempty"`
-	Issues             []string `json:"issues"`
 }
 
 type ScanData struct {

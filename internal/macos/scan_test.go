@@ -41,6 +41,39 @@ func TestScanFindsIntelOnlyAndInvalidSignatureApplications(t *testing.T) {
 	}
 }
 
+func TestScanDoesNotCallOperationalCodesignFailureInvalid(t *testing.T) {
+	root := t.TempDir()
+	appPath := filepath.Join(root, "Example.app")
+	if err := os.MkdirAll(filepath.Join(appPath, "Contents", "MacOS"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appPath, "Contents", "MacOS", "App"), []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r, err := (macos.AppScanner{Runner: unavailableSignatureRunner{}}).Scan(context.Background(), []string{root}, 10, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r = diagnosis.Analyze(r)
+	if r.Completeness != report.Partial {
+		t.Fatalf("completeness=%s", r.Completeness)
+	}
+	for _, finding := range r.Findings {
+		if finding.Code == "scan.signature_invalid" {
+			t.Fatalf("operational failure became invalid signature: %#v", r.Findings)
+		}
+	}
+}
+
+type unavailableSignatureRunner struct{ scanRunner }
+
+func (unavailableSignatureRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
+	if path == "/usr/bin/codesign" {
+		return platform.Result{ExitCode: -1, Err: errors.New("codesign unavailable")}
+	}
+	return (scanRunner{}).Run(ctx, path, args...)
+}
+
 type scanRunner struct{}
 
 func (scanRunner) Run(_ context.Context, path string, args ...string) platform.Result {

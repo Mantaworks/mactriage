@@ -10,7 +10,7 @@ All notable user-facing changes to mactriage are documented here.
 - Added privacy-permission denial diagnosis with `permissions` without reading or modifying the TCC database.
 - Added bounded installed-application health inventories with `scan`.
 - Added report comparison, Markdown summaries, and plain-language finding explanations.
-- Extended `watch` with CPU, resident memory, threads, sockets, and available cumulative disk-read measurements.
+- Extended `watch` with CPU, resident memory, threads, and sockets; exact disk byte counters remain optional and are never estimated from page faults.
 - Preserved existing JSON/NDJSON contracts, safety boundaries, accessibility modes, and conventional subcommands.
 
 ## v0.1.0

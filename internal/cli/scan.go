@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/Mantaworks/mactriage/internal/diagnosis"
@@ -57,9 +56,6 @@ func (a *application) scanCommand() *cobra.Command {
 			if err := a.renderReport(r); err != nil {
 				return err
 			}
-			if !a.opts.json {
-				renderScannedApps(a.config.Out, r)
-			}
 			a.setExit(cmd, r.ExitCode())
 			return nil
 		},
@@ -67,31 +63,4 @@ func (a *application) scanCommand() *cobra.Command {
 	cmd.Flags().IntVar(&limit, "limit", 250, "maximum applications to inspect")
 	cmd.Flags().IntVar(&workers, "workers", 6, "concurrent application inspections")
 	return cmd
-}
-
-func renderScannedApps(out interface{ Write([]byte) (int, error) }, r report.Report) {
-	for _, evidence := range r.Evidence {
-		data, ok := evidence.Data.(report.ScanData)
-		if !ok {
-			continue
-		}
-		problemCount := 0
-		for _, app := range data.Apps {
-			if len(app.Issues) > 0 {
-				problemCount++
-			}
-		}
-		if problemCount == 0 {
-			fmt.Fprintf(out, "\nChecked applications\n  %d inspected · no compatibility or integrity problems found\n", len(data.Apps))
-			return
-		}
-		fmt.Fprintf(out, "\nApplications needing attention (%d)\n", problemCount)
-		for _, app := range data.Apps {
-			if len(app.Issues) == 0 {
-				continue
-			}
-			fmt.Fprintf(out, "  %s\n    %s\n    %s\n", app.Name, app.Path, strings.Join(app.Issues, ", "))
-		}
-		return
-	}
 }

@@ -31,7 +31,19 @@ func (p PermissionInspector) Inspect(ctx context.Context, app App, lookback time
 	r := report.New("permissions", app.Path)
 	r.Host = (Collector{Runner: p.Runner}).host(ctx)
 	entitlements := p.Runner.Run(ctx, "/usr/bin/codesign", "-d", "--entitlements", ":-", app.Path)
-	declared := permissionCategories(entitlements.Stdout + "\n" + entitlements.Stderr)
+	entitlementsStatus := report.StatusOK
+	switch {
+	case entitlements.TimedOut:
+		entitlementsStatus = report.StatusTimedOut
+	case entitlements.Err != nil:
+		entitlementsStatus = report.StatusUnavailable
+	case entitlements.Truncated:
+		entitlementsStatus = report.StatusPartial
+	}
+	declared := []string(nil)
+	if entitlementsStatus == report.StatusOK || entitlementsStatus == report.StatusPartial {
+		declared = permissionCategories(entitlements.Stdout + "\n" + entitlements.Stderr)
+	}
 	predicate := fmt.Sprintf(`process == "tccd" AND eventMessage CONTAINS[c] "%s"`, predicateEscape(app.BundleID))
 	logs := p.Runner.Run(ctx, "/usr/bin/log", "show", "--last", fmt.Sprintf("%.0fs", lookback.Seconds()), "--style", "ndjson", "--predicate", predicate)
 	if logs.TimedOut {
@@ -53,7 +65,11 @@ func (p PermissionInspector) Inspect(ctx context.Context, app App, lookback time
 		status = report.StatusPartial
 		summary += " (bounded output was truncated)"
 	}
-	r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidencePermissions, Status: status, Summary: summary, Data: report.PermissionsData{BundleID: app.BundleID, Declared: declared, Denials: denials}})
+	if entitlementsStatus != report.StatusOK {
+		status = report.StatusPartial
+		summary += " (declared entitlements were not completely available)"
+	}
+	r.Evidence = append(r.Evidence, report.Evidence{ID: report.EvidencePermissions, Status: status, Summary: summary, Data: report.PermissionsData{BundleID: app.BundleID, EntitlementsStatus: entitlementsStatus, Declared: declared, Denials: denials}})
 	return r, nil
 }
 

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type HomeChoice struct {
@@ -18,15 +17,18 @@ func GettingStarted(w io.Writer, color bool) {
 	name := "mactriage"
 	tagline := "Mac app troubleshooting, explained in plain language."
 	if color {
-		name = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render(name)
-		tagline = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(tagline)
+		name = decorate(name, "12", true, true)
+		tagline = decorate(tagline, "8", false, true)
 	}
 	fmt.Fprintf(w, "%s\n%s\n\nWhat would you like to troubleshoot?\n\n", name, tagline)
-	fmt.Fprintln(w, "  App will not open      mactriage diagnose <app>")
-	fmt.Fprintln(w, "  App is frozen or slow  mactriage hang <app|pid>")
-	fmt.Fprintln(w, "  Permission problem     mactriage permissions <app>")
-	fmt.Fprintln(w, "  Check installed apps   mactriage scan")
-	fmt.Fprintln(w, "  Mac resource pressure  mactriage system")
+	task := func(label, command string) {
+		fmt.Fprintf(w, "  %s %-23s %s\n", decorate("◆", "12", true, color), label, decorate(command, "8", false, color))
+	}
+	task("App will not open", "mactriage diagnose <app>")
+	task("App is frozen or slow", "mactriage hang <app|pid>")
+	task("Permission problem", "mactriage permissions <app>")
+	task("Check installed apps", "mactriage scan")
+	task("Mac resource pressure", "mactriage system")
 	fmt.Fprintln(w, "\nRun mactriage in a terminal for the guided menu, or mactriage --help for every command.")
 }
 

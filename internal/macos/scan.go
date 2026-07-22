@@ -82,8 +82,8 @@ func (s AppScanner) Scan(ctx context.Context, roots []string, limit, workers int
 	status := report.StatusOK
 	summary := fmt.Sprintf("Inspected %d applications", len(apps))
 	for _, app := range apps {
-		if len(app.Issues) > 0 {
-			status = report.StatusFailed
+		if incompleteStatus(app.SignatureStatus) || incompleteStatus(app.ArchitectureStatus) {
+			status = report.StatusPartial
 			break
 		}
 	}
@@ -153,46 +153,50 @@ func discoverApps(roots []string, limit int) ([]string, bool, error) {
 }
 
 func (s AppScanner) inspectApp(ctx context.Context, path string, host report.Host) report.ScannedApp {
-	item := report.ScannedApp{Path: path, Name: strings.TrimSuffix(filepath.Base(path), ".app"), Issues: []string{}}
+	item := report.ScannedApp{Path: path, Name: strings.TrimSuffix(filepath.Base(path), ".app"), SignatureStatus: report.StatusSkipped, ArchitectureStatus: report.StatusSkipped}
 	resolver := Resolver{Runner: s.Runner}
 	app, err := resolver.readBundle(ctx, path)
 	if err != nil {
-		item.Issues = append(item.Issues, "malformed_bundle")
 		return item
 	}
+	item.BundleReadable = true
 	item.Name, item.BundleID, item.Version = app.Name, app.BundleID, app.Version
 	if app.ExecutablePath == "" {
-		item.Issues = append(item.Issues, "executable_missing")
 	} else if info, statErr := os.Stat(app.ExecutablePath); statErr != nil || info.IsDir() {
-		item.Issues = append(item.Issues, "executable_missing")
 	} else {
 		item.ExecutablePresent = true
 		item.ExecutableRunnable = info.Mode()&0o111 != 0
-		if !item.ExecutableRunnable {
-			item.Issues = append(item.Issues, "executable_not_runnable")
-		}
 	}
-	valid := s.Runner.Run(ctx, "/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", path).Err == nil
-	item.SignatureValid = &valid
-	if !valid {
-		item.Issues = append(item.Issues, "signature_invalid")
+	signature := s.Runner.Run(ctx, "/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", path)
+	switch {
+	case signature.TimedOut:
+		item.SignatureStatus = report.StatusTimedOut
+	case signature.Err != nil && signature.ExitCode < 0:
+		item.SignatureStatus = report.StatusUnavailable
+	default:
+		valid := signature.Err == nil
+		item.SignatureStatus = report.StatusOK
+		item.SignatureValid = &valid
 	}
 	if item.ExecutablePresent {
 		arch := s.Runner.Run(ctx, "/usr/bin/lipo", "-archs", app.ExecutablePath)
-		if arch.Err == nil {
+		switch {
+		case arch.TimedOut:
+			item.ArchitectureStatus = report.StatusTimedOut
+		case arch.Err != nil:
+			item.ArchitectureStatus = report.StatusUnavailable
+		default:
+			item.ArchitectureStatus = report.StatusOK
 			item.Architectures = strings.Fields(arch.Stdout)
-			if host.Arch == "arm64" && contains(item.Architectures, "x86_64") && !contains(item.Architectures, "arm64") && !contains(item.Architectures, "arm64e") {
-				item.Issues = append(item.Issues, "intel_only")
-			}
 		}
 	}
 	if app.MinimumOS != "" && host.OSVersion != "" {
 		supported := compareVersions(host.OSVersion, app.MinimumOS) >= 0
 		item.OSSupported = &supported
-		if !supported {
-			item.Issues = append(item.Issues, "os_unsupported")
-		}
 	}
-	sort.Strings(item.Issues)
 	return item
+}
+
+func incompleteStatus(status report.Status) bool {
+	return status == report.StatusUnavailable || status == report.StatusTimedOut || status == report.StatusPartial
 }
