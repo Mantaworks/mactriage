@@ -107,6 +107,50 @@ func TestResolverClassifiesMalformedPlist(t *testing.T) {
 	}
 }
 
+func TestResolverExtractsRequiredKeysWhenWholePlistCannotBecomeJSON(t *testing.T) {
+	root := t.TempDir()
+	appPath := filepath.Join(root, "Data.app")
+	contents := filepath.Join(appPath, "Contents")
+	if err := os.MkdirAll(filepath.Join(contents, "MacOS"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plist := `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleName</key><string>Data App</string><key>CFBundleIdentifier</key><string>dev.example.data</string><key>CFBundleExecutable</key><string>DataApp</string><key>OpaqueValue</key><data>AAE=</data></dict></plist>`
+	if err := os.WriteFile(filepath.Join(contents, "Info.plist"), []byte(plist), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(contents, "MacOS", "DataApp"), []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	apps, err := (macos.Resolver{Runner: platform.ExecRunner{Timeout: time.Second}}).Resolve(context.Background(), appPath)
+	if err != nil || len(apps) != 1 || apps[0].Name != "Data App" || apps[0].Executable != "DataApp" {
+		t.Fatalf("fallback metadata extraction failed: apps=%#v error=%v", apps, err)
+	}
+}
+
+func TestResolverReadsWrappedIOSApplicationLayout(t *testing.T) {
+	root := t.TempDir()
+	appPath := filepath.Join(root, "Wrapped.app")
+	inner := filepath.Join(appPath, "Wrapper", "Inner.app")
+	if err := os.MkdirAll(inner, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plist := `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleName</key><string>Wrapped</string><key>CFBundleExecutable</key><string>WrappedBin</string></dict></plist>`
+	if err := os.WriteFile(filepath.Join(inner, "Info.plist"), []byte(plist), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(inner, "WrappedBin"), []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join("Wrapper", "Inner.app"), filepath.Join(appPath, "WrappedBundle")); err != nil {
+		t.Fatal(err)
+	}
+	apps, err := (macos.Resolver{Runner: platform.ExecRunner{Timeout: time.Second}}).Resolve(context.Background(), appPath)
+	expected, pathErr := filepath.EvalSymlinks(filepath.Join(inner, "WrappedBin"))
+	if pathErr != nil || err != nil || len(apps) != 1 || apps[0].ExecutablePath != expected {
+		t.Fatalf("wrapped app resolution failed: apps=%#v error=%v", apps, err)
+	}
+}
+
 type spotlightRunner struct{ path string }
 
 func (r spotlightRunner) Run(ctx context.Context, path string, args ...string) platform.Result {
