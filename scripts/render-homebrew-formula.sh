@@ -15,7 +15,6 @@ if [ -z "$output_path" ]; then
   exit 2
 fi
 
-version=${tag#v}
 source_url=${MACTRIAGE_SOURCE_URL:-"https://github.com/Mantaworks/mactriage/archive/refs/tags/$tag.tar.gz"}
 
 case "$source_url" in
@@ -44,7 +43,6 @@ else
 fi
 
 sed \
-  -e "s|@VERSION@|$version|g" \
   -e "s|@SOURCE_URL@|$source_url|g" \
   -e "s|@SHA256@|$checksum|g" \
   "$template_path" >"$rendered_path"
