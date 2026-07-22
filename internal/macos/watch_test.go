@@ -3,6 +3,7 @@ package macos_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -26,7 +27,7 @@ func TestWatcherEmitsNumericDescriptorSample(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
 	}
-	if len(events) != 1 || events[0].DescriptorCount != 2 || events[0].PID != 42 {
+	if len(events) != 1 || events[0].DescriptorCount != 2 || events[0].PID != 42 || events[0].CPUPercent != 42.5 || events[0].RSSBytes != 256*1024*1024 || events[0].Threads != 2 || events[0].SocketCount != 1 || events[0].MemoryFreePercent != 37 {
 		t.Fatalf("unexpected events: %#v", events)
 	}
 }
@@ -52,6 +53,32 @@ func TestWatcherSurvivesNamedProcessPIDChange(t *testing.T) {
 	}
 	if !foundRestart {
 		t.Fatalf("missing restart event: %#v", events)
+	}
+}
+
+func TestWatcherWarnsOnRepeatedRestartLoop(t *testing.T) {
+	runner := &loopingWatchRunner{}
+	clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	watcher := macos.Watcher{Runner: runner, Now: func() time.Time {
+		clock = clock.Add(time.Second)
+		return clock
+	}}
+	var events []macos.WatchEvent
+	err := watcher.Run(context.Background(), macos.WatchOptions{Target: "example", Interval: time.Millisecond, Window: time.Minute, Duration: 8 * time.Second}, func(event macos.WatchEvent) error {
+		events = append(events, event)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, event := range events {
+		if event.Type == "restart" && event.Severity == "warning" && event.RestartCount >= 3 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("restart-loop warning missing: %#v", events)
 	}
 }
 
@@ -106,7 +133,14 @@ func (watchRunner) Run(_ context.Context, path string, args ...string) platform.
 	case "/usr/bin/pgrep":
 		return platform.Result{Stdout: "42\n"}
 	case "/usr/sbin/lsof":
-		return platform.Result{Stdout: strings.Join([]string{"p42", "cexample", "fcwd", "f0", "tCHR", "f9u", "tREG"}, "\x00") + "\x00"}
+		return platform.Result{Stdout: strings.Join([]string{"p42", "cexample", "fcwd", "f0", "tIPv4", "f9u", "tREG"}, "\x00") + "\x00"}
+	case "/bin/ps":
+		if len(args) > 0 && args[0] == "-M" {
+			return platform.Result{Stdout: "USER PID COMMAND\nuser 42 example\nuser 42 example\n"}
+		}
+		return platform.Result{Stdout: "42.5 262144 8\n"}
+	case "/usr/bin/memory_pressure":
+		return platform.Result{Stdout: "System-wide memory free percentage: 37%\n"}
 	case "/usr/bin/log":
 		return platform.Result{Stdout: ""}
 	default:
@@ -117,6 +151,22 @@ func (watchRunner) Run(_ context.Context, path string, args ...string) platform.
 type restartWatchRunner struct {
 	pgrepCalls int
 	lsofCalls  int
+}
+
+type loopingWatchRunner struct{ pid int }
+
+func (r *loopingWatchRunner) Run(_ context.Context, path string, _ ...string) platform.Result {
+	switch path {
+	case "/usr/bin/pgrep":
+		r.pid++
+		return platform.Result{Stdout: fmt.Sprintf("%d\n", 40+r.pid)}
+	case "/usr/sbin/lsof":
+		return platform.Result{Stdout: "p42\x00f0\x00tREG\x00"}
+	case "/usr/bin/log":
+		return platform.Result{}
+	default:
+		return platform.Result{Err: errors.New("unavailable")}
+	}
 }
 
 func (r *restartWatchRunner) Run(_ context.Context, path string, args ...string) platform.Result {

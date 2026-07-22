@@ -24,6 +24,6 @@ goreleaser check
 goreleaser release --snapshot --clean
 ```
 
-Inspect both archives, checksums, SBOMs, generated man pages, completions, plain output, JSON output, and an interactive diagnostic on a disposable test app. Do not exercise `repair syspolicyd` on a development machine merely to test a release.
+Inspect both archives, checksums, SBOMs, generated man pages, completions, plain output, JSON output, and the no-argument guided menu. Exercise `diagnose`, `collect`, `hang`, `permissions`, `scan`, `compare`, `summarize`, and `explain` with disposable fixtures. Confirm that raw samples require `--sample-output`, support bundles contain only their three declared files, and JSON/NDJSON remains free of ANSI and progress output. Do not exercise `repair syspolicyd` on a development machine merely to test a release.
 
-After two clean acceptance passes, configure the tap secret, push `main`, and tag the accepted commit with a semantic version such as `v0.1.0`. The release workflow publishes both architecture archives, `checksums.txt`, and SBOMs; `install.sh` consumes those assets directly. For stable tags, the workflow also hashes GitHub's tagged source archive and publishes the matching source-built Homebrew formula.
+After two clean acceptance passes, configure the tap secret, push `main`, and tag the accepted commit with a semantic version such as `v0.2.0`. The release workflow publishes both architecture archives, `checksums.txt`, and SBOMs; `install.sh` consumes those assets directly. For stable tags, the workflow also hashes GitHub's tagged source archive and publishes the matching source-built Homebrew formula.

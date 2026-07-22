@@ -29,6 +29,9 @@ const (
 	EvidenceDescriptors  EvidenceID = "descriptors"
 	EvidenceRestart      EvidenceID = "restart"
 	EvidenceTopProcesses EvidenceID = "top_processes"
+	EvidenceProcess      EvidenceID = "process"
+	EvidencePermissions  EvidenceID = "permissions"
+	EvidenceScan         EvidenceID = "scan"
 )
 
 const (
@@ -199,6 +202,52 @@ type TopProcessesData struct {
 	evidenceMarker
 	Processes []ProcessDescriptorSummary `json:"processes"`
 	Truncated bool                       `json:"truncated"`
+}
+
+type ProcessData struct {
+	evidenceMarker
+	PID             int     `json:"pid"`
+	Name            string  `json:"name"`
+	State           string  `json:"state,omitempty"`
+	CPUPercent      float64 `json:"cpu_percent"`
+	RSSBytes        uint64  `json:"rss_bytes"`
+	Threads         int     `json:"threads"`
+	Elapsed         string  `json:"elapsed,omitempty"`
+	CPUThreshold    float64 `json:"cpu_threshold"`
+	MemoryThreshold uint64  `json:"memory_threshold_bytes"`
+}
+
+type PermissionObservation struct {
+	Category string `json:"category"`
+	Decision string `json:"decision"`
+	Count    int    `json:"count"`
+}
+
+type PermissionsData struct {
+	evidenceMarker
+	BundleID string                  `json:"bundle_id"`
+	Declared []string                `json:"declared,omitempty"`
+	Denials  []PermissionObservation `json:"denials,omitempty"`
+}
+
+type ScannedApp struct {
+	Path               string   `json:"path"`
+	Name               string   `json:"name"`
+	BundleID           string   `json:"bundle_id,omitempty"`
+	Version            string   `json:"version,omitempty"`
+	Architectures      []string `json:"architectures,omitempty"`
+	ExecutablePresent  bool     `json:"executable_present"`
+	ExecutableRunnable bool     `json:"executable_runnable"`
+	SignatureValid     *bool    `json:"signature_valid,omitempty"`
+	OSSupported        *bool    `json:"os_supported,omitempty"`
+	Issues             []string `json:"issues"`
+}
+
+type ScanData struct {
+	evidenceMarker
+	Roots     []string     `json:"roots"`
+	Apps      []ScannedApp `json:"apps"`
+	Truncated bool         `json:"truncated"`
 }
 
 type Evidence struct {

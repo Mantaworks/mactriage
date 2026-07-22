@@ -29,6 +29,53 @@ func Analyze(r report.Report) report.Report {
 	if restart := byID[report.EvidenceRestart]; restart.ID != "" && restart.Status == report.StatusFailed {
 		addFinding(&r, "repair.failed", report.Error, "syspolicyd restart failed", restart.Error, "high", []report.EvidenceID{"restart"}, "Review the error and confirm administrator access before retrying.")
 	}
+	process, hasProcess := byID[report.EvidenceProcess].Data.(report.ProcessData)
+	if hasProcess {
+		state := strings.ToUpper(process.State)
+		if strings.ContainsAny(state, "DUT") {
+			addFinding(&r, "hang.suspected", report.Error, "The application may be unresponsive", fmt.Sprintf("Process %d is in state %s, which can indicate an uninterruptible, stopped, or suspended process.", process.PID, process.State), "medium", []report.EvidenceID{report.EvidenceProcess}, "Capture a process sample and share it with the application developer.")
+		}
+		if process.CPUThreshold > 0 && process.CPUPercent >= process.CPUThreshold {
+			addFinding(&r, "resource.cpu_high", report.Warning, "The application is using high CPU", fmt.Sprintf("Process %d is using %.1f%% CPU, above the %.1f%% threshold.", process.PID, process.CPUPercent, process.CPUThreshold), "medium", []report.EvidenceID{report.EvidenceProcess}, "Observe the process for longer and capture a sample if usage remains high.")
+		}
+		if process.MemoryThreshold > 0 && process.RSSBytes >= process.MemoryThreshold {
+			addFinding(&r, "resource.memory_high", report.Warning, "The application is using high memory", fmt.Sprintf("Process %d is using %d bytes of resident memory.", process.PID, process.RSSBytes), "medium", []report.EvidenceID{report.EvidenceProcess}, "Check system memory pressure and reproduce the workload before reporting it.")
+		}
+	}
+	permissions, hasPermissions := byID[report.EvidencePermissions].Data.(report.PermissionsData)
+	if hasPermissions && len(permissions.Denials) > 0 {
+		categories := make([]string, 0, len(permissions.Denials))
+		for _, denial := range permissions.Denials {
+			categories = append(categories, denial.Category)
+		}
+		addFinding(&r, "permission.denied", report.Error, "macOS denied an application permission", "Correlated privacy logs recorded explicit denials for: "+strings.Join(categories, ", ")+".", "high", []report.EvidenceID{report.EvidencePermissions}, "Review only the expected categories in Privacy & Security.")
+		addAction(&r, action.OpenSecurity)
+	}
+	scan, hasScan := byID[report.EvidenceScan].Data.(report.ScanData)
+	if hasScan {
+		counts := map[string]int{}
+		for _, app := range scan.Apps {
+			for _, issue := range app.Issues {
+				counts[issue]++
+			}
+		}
+		if counts["malformed_bundle"] > 0 {
+			addFinding(&r, "scan.malformed_bundle", report.Error, "Some application bundles are malformed", fmt.Sprintf("%d scanned applications could not be parsed as complete bundles.", counts["malformed_bundle"]), "high", []report.EvidenceID{report.EvidenceScan}, "Reinstall the affected applications from their publishers.")
+		}
+		missing := counts["executable_missing"] + counts["executable_not_runnable"]
+		if missing > 0 {
+			addFinding(&r, "scan.executable_problem", report.Error, "Some applications have executable problems", fmt.Sprintf("%d scanned applications have a missing or non-runnable executable.", missing), "high", []report.EvidenceID{report.EvidenceScan}, "Reinstall the affected applications rather than modifying their bundles manually.")
+		}
+		if counts["signature_invalid"] > 0 {
+			addFinding(&r, "scan.signature_invalid", report.Error, "Some application signatures are invalid", fmt.Sprintf("%d scanned applications failed strict signature verification.", counts["signature_invalid"]), "high", []report.EvidenceID{report.EvidenceScan}, "Replace affected applications with trusted publisher-provided copies.")
+		}
+		if counts["os_unsupported"] > 0 {
+			addFinding(&r, "scan.os_unsupported", report.Error, "Some applications require a newer macOS", fmt.Sprintf("%d scanned applications declare a newer minimum macOS version.", counts["os_unsupported"]), "high", []report.EvidenceID{report.EvidenceScan}, "Update macOS or install compatible application versions.")
+		}
+		if counts["intel_only"] > 0 {
+			addFinding(&r, "scan.intel_only", report.Warning, "Some applications are Intel-only", fmt.Sprintf("%d scanned applications require Rosetta on this Apple silicon Mac.", counts["intel_only"]), "high", []report.EvidenceID{report.EvidenceScan}, "Check publishers for Apple silicon-native updates.")
+		}
+	}
 
 	logs, _ := byID[report.EvidenceLogs].Data.(report.LogsData)
 	descriptors, _ := byID[report.EvidenceDescriptors].Data.(report.DescriptorData)

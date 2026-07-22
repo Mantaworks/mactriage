@@ -38,6 +38,16 @@ func TestHumanPlainUsesTextSeverityLabels(t *testing.T) {
 	}
 }
 
+func TestHumanDoesNotCallPartialEvidenceHealthy(t *testing.T) {
+	r := report.New("permissions", "Example")
+	r.Completeness = report.Partial
+	var out bytes.Buffer
+	present.Human(&out, r, present.Style{Color: false})
+	if !strings.Contains(out.String(), "INCONCLUSIVE") || strings.Contains(out.String(), "No diagnostic problems") {
+		t.Fatalf("partial report rendered as healthy: %q", out.String())
+	}
+}
+
 func TestHumanRendersNarrowAndWideWithoutLosingSeverity(t *testing.T) {
 	r := report.New("diagnose", "Example")
 	r.Findings = []report.Finding{{Code: "test", Severity: report.Warning, Title: "A warning", Explanation: strings.Repeat("evidence ", 20)}}

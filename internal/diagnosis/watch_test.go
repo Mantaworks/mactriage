@@ -25,3 +25,10 @@ func TestClassifyWatchReportsGrowthRate(t *testing.T) {
 		t.Fatalf("severity=%s message=%q", severity, message)
 	}
 }
+
+func TestClassifyWatchReportsBroaderResourcePressure(t *testing.T) {
+	severity, message := diagnosis.ClassifyWatch(diagnosis.WatchFacts{CPUPercent: 95, CPUThreshold: 80, MemoryFreePercent: 5, MinMemoryFreePercent: 10})
+	if severity != report.Warning || message == "" {
+		t.Fatalf("severity=%s message=%q", severity, message)
+	}
+}
