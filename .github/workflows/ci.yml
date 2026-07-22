@@ -39,6 +39,18 @@ jobs:
           go run ./cmd/gen-docs "$RUNNER_TEMP/generated"
           test -s "$RUNNER_TEMP/generated/man/mactriage.1"
           test -s "$RUNNER_TEMP/generated/completions/_mactriage"
+      - name: Validate Homebrew formula generator
+        env:
+          MACTRIAGE_SOURCE_URL: https://github.com/Mantaworks/mactriage/archive/${{ github.sha }}.tar.gz
+        run: |
+          ci_tap="$RUNNER_TEMP/homebrew-ci"
+          mkdir -p "$ci_tap/Formula"
+          git -C "$ci_tap" init
+          scripts/render-homebrew-formula.sh v0.0.0 "$ci_tap/Formula/mactriage.rb"
+          tap_dir="$(brew --repository)/Library/Taps/mantaworks/homebrew-ci"
+          mkdir -p "$(dirname "$tap_dir")"
+          ln -s "$ci_tap" "$tap_dir"
+          brew style Mantaworks/ci
       - name: Vulnerability scan
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest

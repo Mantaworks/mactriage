@@ -14,11 +14,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-      MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-      MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
-      MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-      MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-      MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -27,21 +22,35 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: true
-      - name: Require signing and notarization credentials
-        run: |
-          test -n "$MACOS_SIGN_P12"
-          test -n "$MACOS_SIGN_PASSWORD"
-          test -n "$MACOS_NOTARY_KEY"
-          test -n "$MACOS_NOTARY_KEY_ID"
-          test -n "$MACOS_NOTARY_ISSUER_ID"
-          test -n "$HOMEBREW_TAP_TOKEN"
+      - name: Require Homebrew tap credential
+        run: test -n "$HOMEBREW_TAP_TOKEN"
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@v0
       - name: Test release commit
         run: go test -race ./...
-      - name: Sign, notarize, and publish
+      - name: Publish release
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: '~> v2'
           args: release --clean --timeout 30m
+      - name: Check out Homebrew tap
+        if: ${{ !contains(github.ref_name, '-') }}
+        uses: actions/checkout@v7
+        with:
+          repository: Mantaworks/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+      - name: Update source-built Homebrew formula
+        if: ${{ !contains(github.ref_name, '-') }}
+        run: |
+          scripts/render-homebrew-formula.sh "$GITHUB_REF_NAME" homebrew-tap/Formula/mactriage.rb
+          cd homebrew-tap
+          git config user.name "mactriage release bot"
+          git config user.email "actions@github.com"
+          git add Formula/mactriage.rb
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "chore: update mactriage to $GITHUB_REF_NAME"
+          git push origin HEAD:main

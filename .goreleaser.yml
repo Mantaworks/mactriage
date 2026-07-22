@@ -23,21 +23,6 @@ builds:
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
-notarize:
-  macos:
-    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
-      ids:
-        - mactriage
-      sign:
-        certificate: '{{.Env.MACOS_SIGN_P12}}'
-        password: '{{.Env.MACOS_SIGN_PASSWORD}}'
-      notarize:
-        issuer_id: '{{.Env.MACOS_NOTARY_ISSUER_ID}}'
-        key_id: '{{.Env.MACOS_NOTARY_KEY_ID}}'
-        key: '{{.Env.MACOS_NOTARY_KEY}}'
-        wait: true
-        timeout: 20m
-
 archives:
   - id: release
     formats:
@@ -57,39 +42,6 @@ checksum:
 
 sboms:
   - artifacts: archive
-
-homebrew_casks:
-  - name: mactriage
-    ids:
-      - release
-    binaries:
-      - mactriage
-    manpages:
-      - man/mactriage.1
-      - man/mactriage-completion.1
-      - man/mactriage-diagnose.1
-      - man/mactriage-repair.1
-      - man/mactriage-repair-syspolicyd.1
-      - man/mactriage-system.1
-      - man/mactriage-version.1
-      - man/mactriage-watch.1
-    completions:
-      bash: completions/mactriage.bash
-      zsh: completions/_mactriage
-      fish: completions/mactriage.fish
-    homepage: https://github.com/Mantaworks/mactriage
-    description: Diagnose application launch failures and descriptor pressure
-    license: MIT
-    skip_upload: auto
-    commit_msg_template: "chore: update mactriage to {{ .Tag }}"
-    repository:
-      owner: Mantaworks
-      name: homebrew-tap
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    commit_author:
-      name: mactriage release bot
-      email: actions@github.com
 
 changelog:
   sort: asc

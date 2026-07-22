@@ -1,0 +1,26 @@
+class Mactriage < Formula
+  desc "Diagnose application launch failures and descriptor pressure"
+  homepage "https://github.com/Mantaworks/mactriage"
+  url "@SOURCE_URL@"
+  version "@VERSION@"
+  sha256 "@SHA256@"
+  license "MIT"
+  head "https://github.com/Mantaworks/mactriage.git", branch: "main"
+
+  depends_on "go" => :build
+  depends_on macos: :ventura
+
+  def install
+    ldflags = "-s -w -X main.version=#{version}"
+    system "go", "build", *std_go_args(ldflags:), "./cmd/mactriage"
+
+    man1.install Dir["docs/generated/man/*.1"]
+    bash_completion.install "docs/generated/completions/mactriage.bash" => "mactriage"
+    zsh_completion.install "docs/generated/completions/_mactriage"
+    fish_completion.install "docs/generated/completions/mactriage.fish"
+  end
+
+  test do
+    assert_match "mactriage #{version}", shell_output("#{bin}/mactriage version")
+  end
+end
