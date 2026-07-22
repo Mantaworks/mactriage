@@ -28,6 +28,7 @@ func (a *application) baselineStore() baseline.Store {
 
 func (a *application) baselineSaveCommand() *cobra.Command {
 	var only, skip []string
+	var storageDetails bool
 	cmd := &cobra.Command{
 		Use:   "save [name]",
 		Short: "Save a private sanitized doctor baseline",
@@ -37,9 +38,20 @@ func (a *application) baselineSaveCommand() *cobra.Command {
 			if len(args) == 1 {
 				name = args[0]
 			}
-			r, err := (macos.Doctor{Runner: a.runner}).Inspect(cmd.Context(), macos.DoctorOptions{Only: only, Skip: skip})
+			r, err := (macos.Doctor{Runner: a.runner}).Inspect(cmd.Context(), macos.DoctorOptions{Only: only, Skip: skip, Offline: a.opts.offline})
 			if err != nil {
 				return err
+			}
+			if storageDetails {
+				storageReport, storageErr := (macos.StorageInspector{Runner: a.runner}).Inspect(cmd.Context(), true)
+				if storageErr != nil {
+					return storageErr
+				}
+				for _, evidence := range storageReport.Evidence {
+					if evidence.ID == report.EvidenceStorageDetail {
+						r.Evidence = append(r.Evidence, evidence)
+					}
+				}
 			}
 			r = diagnosis.Analyze(r)
 			r = a.redactReport(r)
@@ -62,6 +74,7 @@ func (a *application) baselineSaveCommand() *cobra.Command {
 	}
 	cmd.Flags().StringSliceVar(&only, "only", nil, "run only selected doctor checks")
 	cmd.Flags().StringSliceVar(&skip, "skip", nil, "skip selected doctor checks")
+	cmd.Flags().BoolVar(&storageDetails, "storage-details", false, "include aggregate standard-folder sizes in this baseline")
 	return cmd
 }
 
@@ -99,6 +112,7 @@ func (a *application) baselineListCommand() *cobra.Command {
 
 func (a *application) baselineCompareCommand() *cobra.Command {
 	var only, skip []string
+	var storageDetails bool
 	cmd := &cobra.Command{
 		Use:   "compare <baseline> [other-baseline]",
 		Short: "Compare a baseline with another baseline or this Mac now",
@@ -112,8 +126,19 @@ func (a *application) baselineCompareCommand() *cobra.Command {
 			if len(args) == 2 {
 				after, err = a.baselineStore().Load(args[1])
 			} else {
-				after, err = (macos.Doctor{Runner: a.runner}).Inspect(cmd.Context(), macos.DoctorOptions{Only: only, Skip: skip})
+				after, err = (macos.Doctor{Runner: a.runner}).Inspect(cmd.Context(), macos.DoctorOptions{Only: only, Skip: skip, Offline: a.opts.offline})
 				after = diagnosis.Analyze(after)
+				if err == nil && storageDetails {
+					storageReport, storageErr := (macos.StorageInspector{Runner: a.runner}).Inspect(cmd.Context(), true)
+					if storageErr != nil {
+						return storageErr
+					}
+					for _, evidence := range storageReport.Evidence {
+						if evidence.ID == report.EvidenceStorageDetail {
+							after.Evidence = append(after.Evidence, evidence)
+						}
+					}
+				}
 			}
 			if err != nil {
 				return err
@@ -138,6 +163,7 @@ func (a *application) baselineCompareCommand() *cobra.Command {
 	}
 	cmd.Flags().StringSliceVar(&only, "only", nil, "run only selected doctor checks for the current comparison")
 	cmd.Flags().StringSliceVar(&skip, "skip", nil, "skip selected doctor checks for the current comparison")
+	cmd.Flags().BoolVar(&storageDetails, "storage-details", false, "compare aggregate standard-folder sizes with the baseline")
 	return cmd
 }
 

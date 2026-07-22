@@ -7,7 +7,6 @@ import (
 
 	"github.com/Mantaworks/mactriage/internal/action"
 	"github.com/Mantaworks/mactriage/internal/diagnosis"
-	"github.com/Mantaworks/mactriage/internal/knowledge"
 	"github.com/Mantaworks/mactriage/internal/macos"
 	"github.com/Mantaworks/mactriage/internal/present"
 	"github.com/Mantaworks/mactriage/internal/report"
@@ -127,8 +126,17 @@ func filterSeverity(r report.Report, minimum report.Severity) report.Report {
 	}
 	actions := r.Actions[:0]
 	for _, available := range r.Actions {
-		if available.ID == action.OpenSoftwareUpdate && !visible[knowledge.CodeDoctorUpdatesAvailable] {
-			continue
+		if codes := action.RelevantFindingCodes(available.ID); len(codes) > 0 {
+			keep := false
+			for _, code := range codes {
+				if visible[code] {
+					keep = true
+					break
+				}
+			}
+			if !keep {
+				continue
+			}
 		}
 		actions = append(actions, available)
 	}

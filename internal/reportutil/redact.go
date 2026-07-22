@@ -11,6 +11,9 @@ import (
 // while retaining the aggregate facts and stable diagnostic codes needed by IT.
 func RedactStrict(input report.Report) report.Report {
 	r := input
+	r.Evidence = append([]report.Evidence(nil), input.Evidence...)
+	r.Findings = append([]report.Finding(nil), input.Findings...)
+	r.Actions = append([]report.Action(nil), input.Actions...)
 	values := []string{r.Target}
 	r.Target = "<redacted>"
 	for i := range r.Evidence {
@@ -37,6 +40,7 @@ func RedactStrict(input report.Report) report.Report {
 			data.BundleID = "<redacted>"
 			e.Data = data
 		case report.ScanData:
+			data.Apps = append([]report.ScannedApp(nil), data.Apps...)
 			for j := range data.Apps {
 				values = append(values, data.Apps[j].Path, data.Apps[j].Name, data.Apps[j].BundleID)
 				data.Apps[j].Path, data.Apps[j].Name, data.Apps[j].BundleID = "<redacted>", "<redacted>", "<redacted>"
@@ -44,6 +48,7 @@ func RedactStrict(input report.Report) report.Report {
 			data.Roots = nil
 			e.Data = data
 		case report.StartupItemsData:
+			data.Items = append([]report.StartupItem(nil), data.Items...)
 			for j := range data.Items {
 				values = append(values, data.Items[j].Name, data.Items[j].Identifier, data.Items[j].TeamID)
 				data.Items[j] = report.StartupItem{Name: "<redacted>"}
@@ -54,10 +59,22 @@ func RedactStrict(input report.Report) report.Report {
 			data.Host, data.VPNInterfaces = "<redacted>", nil
 			e.Data = data
 		case report.TopProcessesData:
+			data.Processes = append([]report.ProcessDescriptorSummary(nil), data.Processes...)
 			for j := range data.Processes {
 				values = append(values, data.Processes[j].Command)
 				data.Processes[j].Command = "<redacted>"
+				data.Processes[j].PID = 0
 			}
+			e.Data = data
+		case report.RestartLoopsData:
+			data.Processes = append([]report.ProcessRestartObservation(nil), data.Processes...)
+			for j := range data.Processes {
+				values = append(values, data.Processes[j].Name)
+				data.Processes[j].Name = "<redacted>"
+			}
+			e.Data = data
+		case report.RestartData:
+			data.OldPID, data.NewPID = 0, 0
 			e.Data = data
 		case report.RelaunchData:
 			values = append(values, data.ProcessName)

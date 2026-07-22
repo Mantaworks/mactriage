@@ -389,7 +389,7 @@ type NetworkData struct {
 	DNSServerCount       int      `json:"dns_server_count"`
 	HTTPStatus           Status   `json:"http_status,omitempty"`
 	HTTPReachable        bool     `json:"http_reachable"`
-	ClockPlausible       bool     `json:"clock_plausible"`
+	ClockYear            int      `json:"clock_year,omitempty"`
 }
 
 type ProcessRestartObservation struct {

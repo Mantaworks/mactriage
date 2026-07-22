@@ -59,6 +59,18 @@ func TestDoctorQuickProfileUsesBoundedEverydayChecks(t *testing.T) {
 	}
 }
 
+func TestDoctorOfflineSkipsNetworkAndUpdates(t *testing.T) {
+	r, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Profile: macos.DoctorProfileFull, Offline: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, evidence := range r.Evidence {
+		if evidence.ID == report.EvidenceNetwork || evidence.ID == report.EvidenceUpdates {
+			t.Fatalf("offline profile collected %s", evidence.ID)
+		}
+	}
+}
+
 func TestDoctorMarksUnavailableServiceProbesPartial(t *testing.T) {
 	r, err := (macos.Doctor{Runner: unavailableServiceRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Only: []string{"services"}})
 	if err != nil {

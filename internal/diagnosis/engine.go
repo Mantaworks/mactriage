@@ -183,15 +183,34 @@ func Analyze(r report.Report) report.Report {
 			addAction(&r, action.OpenNetwork)
 		}
 		if network.RouteStatus == report.StatusOK && !network.DefaultRoute {
-			addFinding(&r, knowledge.CodeNetworkNoRoute, report.Error, "No default network route was found", "The Mac did not report a default route for internet traffic.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Reconnect Wi-Fi or Ethernet and review VPN configuration.")
+			recommendation := "Reconnect Wi-Fi or Ethernet and review VPN configuration."
+			if network.WiFiStatus == report.StatusOK && !network.WiFiPowered {
+				recommendation = "Turn on Wi-Fi in Network settings, or connect Ethernet."
+			}
+			if network.WiFiStatus == report.StatusOK && network.WiFiPowered && !network.WiFiAssociated {
+				recommendation = "Join the expected Wi-Fi network or connect Ethernet."
+			}
+			addFinding(&r, knowledge.CodeNetworkNoRoute, report.Error, "No default network route was found", "The Mac did not report a default route for internet traffic.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, recommendation)
+			addAction(&r, action.OpenNetwork)
 		}
 		if network.DNSStatus == report.StatusOK && !network.DNSResolved {
-			addFinding(&r, knowledge.CodeNetworkDNSFailed, report.Error, "DNS lookup failed", fmt.Sprintf("%s did not resolve through the current DNS configuration.", network.Host), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the hostname, VPN, DNS service, and network connection.")
+			explanation := fmt.Sprintf("%s did not resolve through the current DNS configuration.", network.Host)
+			if network.DNSConfigStatus == report.StatusOK && network.DNSServerCount == 0 {
+				explanation += " No DNS servers were present in the active resolver configuration."
+			}
+			addFinding(&r, knowledge.CodeNetworkDNSFailed, report.Error, "DNS lookup failed", explanation, report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the hostname, VPN, DNS service, and network connection.")
+			addAction(&r, action.OpenNetwork)
 		}
 		if network.HTTPSStatus == report.StatusOK && network.HTTPSReachable && !network.TLSValid {
-			addFinding(&r, knowledge.CodeNetworkTLSInvalid, report.Error, "TLS certificate validation failed", "The host was reachable, but its certificate could not be validated.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check the date, proxy or VPN interception, and the site's certificate; do not bypass validation.")
-		} else if network.HTTPSStatus == report.StatusOK && !network.HTTPSReachable {
+			recommendation := "Check the date, proxy or VPN interception, and the site's certificate; do not bypass validation."
+			if network.ClockYear > 0 && network.ClockYear < 2024 {
+				recommendation = "Correct the Mac's date and time in System Settings, then retry; do not bypass certificate validation."
+			}
+			addFinding(&r, knowledge.CodeNetworkTLSInvalid, report.Error, "TLS certificate validation failed", "The host was reachable, but its certificate could not be validated.", report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, recommendation)
+			addAction(&r, action.OpenNetwork)
+		} else if network.HTTPSStatus == report.StatusOK && !network.HTTPSReachable && !(network.HTTPStatus == report.StatusOK && network.HTTPReachable) {
 			addFinding(&r, knowledge.CodeNetworkHTTPSFailed, report.Error, "HTTPS connection failed", fmt.Sprintf("Could not establish an HTTPS connection to %s.", network.Host), report.ConfidenceHigh, []report.EvidenceID{report.EvidenceNetwork}, "Check connectivity, proxy, VPN, and firewall policy.")
+			addAction(&r, action.OpenNetwork)
 		}
 		if network.HTTPStatus == report.StatusOK && network.HTTPReachable && !network.HTTPSReachable {
 			addFinding(&r, knowledge.CodeNetworkCaptivePortal, report.Warning, "A network sign-in page may be blocking HTTPS", "Plain HTTP was reachable while the HTTPS check failed.", report.ConfidenceMedium, []report.EvidenceID{report.EvidenceNetwork}, "Open a browser and complete the network sign-in if this is a guest or public network.")

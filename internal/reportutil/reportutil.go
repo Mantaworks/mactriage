@@ -260,6 +260,19 @@ func appendMetricChanges(comparison *Comparison, before, after report.Report) {
 			appendChange("thermal.cpu_limit", float64(oldValue.CPUSpeedLimit), float64(newValue.CPUSpeedLimit), "percent")
 		}
 	}
+	if oldValue, ok := beforeData[report.EvidenceStorageDetail].(report.StorageDetailsData); ok {
+		if newValue, exists := afterData[report.EvidenceStorageDetail].(report.StorageDetailsData); exists {
+			oldCategories := map[string]uint64{}
+			for _, category := range oldValue.Categories {
+				oldCategories[category.Name] = category.Bytes
+			}
+			for _, category := range newValue.Categories {
+				if beforeBytes, present := oldCategories[category.Name]; present {
+					appendChange("storage.category."+category.Name, float64(beforeBytes), float64(category.Bytes), "bytes")
+				}
+			}
+		}
+	}
 }
 
 func evidenceData(r report.Report) map[report.EvidenceID]report.EvidencePayload {

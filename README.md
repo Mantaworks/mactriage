@@ -123,13 +123,15 @@ Interactive mode shows the exact running PIDs and warns about unsaved work. Afte
 
 ```sh
 mactriage baseline save healthy-morning
+mactriage baseline save healthy-morning --storage-details
 mactriage baseline list
 mactriage baseline compare healthy-morning
+mactriage baseline compare healthy-morning --storage-details
 mactriage baseline compare healthy-morning after-update
 mactriage baseline delete healthy-morning
 ```
 
-Baselines are sanitized Doctor reports stored atomically with mode `0600` under `~/Library/Application Support/mactriage/baselines`. Comparisons show new and resolved findings, evidence-status changes, disk/memory/CPU/descriptor/startup metric changes, and newly Intel-only apps. Deletion affects only the named baseline and requires confirmation (`--yes` is mandatory when noninteractive).
+Baselines are sanitized Doctor reports stored atomically with mode `0600` under `~/Library/Application Support/mactriage/baselines`. Comparisons show new and resolved findings, evidence-status changes, disk/memory/CPU/descriptor/startup/battery/thermal/backup metric changes, and newly Intel-only apps. `--storage-details` explicitly adds aggregate standard-folder changes without retaining filenames. Deletion affects only the named baseline and requires confirmation (`--yes` is mandatory when noninteractive).
 
 ## Diagnose an application
 

@@ -36,7 +36,7 @@ func (n NetworkInspector) Inspect(ctx context.Context, target string) (report.Re
 	data.RouteStatus = networkProbeStatus(route, true)
 	data.DefaultRoute = route.Err == nil && strings.Contains(strings.ToLower(route.Stdout), "gateway:")
 	if n.Detailed {
-		data.ClockPlausible = time.Now().Year() >= 2024
+		data.ClockYear = time.Now().Year()
 		iface := routeInterface(route.Stdout)
 		data.InterfaceStatus = data.RouteStatus
 		data.ActiveInterface = iface != ""
@@ -52,6 +52,9 @@ func (n NetworkInspector) Inspect(ctx context.Context, target string) (report.Re
 			power := n.Runner.Run(ctx, "/usr/sbin/networksetup", "-getairportpower", wifi)
 			associated := n.Runner.Run(ctx, "/usr/sbin/networksetup", "-getairportnetwork", wifi)
 			data.WiFiStatus = networkProbeStatus(power, false)
+			if associationStatus := networkProbeStatus(associated, false); incompleteStatus(associationStatus) {
+				data.WiFiStatus = associationStatus
+			}
 			data.WiFiPowered = strings.Contains(strings.ToLower(power.Stdout), ": on")
 			data.WiFiAssociated = associated.Err == nil && !strings.Contains(strings.ToLower(associated.Stdout), "not associated")
 		}

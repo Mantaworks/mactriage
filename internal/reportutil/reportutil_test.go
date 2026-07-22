@@ -43,6 +43,9 @@ func TestStrictRedactionRemovesNamesAndPathsButKeepsCodes(t *testing.T) {
 	if !strings.Contains(text, "bundle.invalid") {
 		t.Fatalf("strict report removed code: %s", text)
 	}
+	if r.Target != "Secret App" || r.Evidence[0].Data.(report.BundleData).Name != "Secret App" {
+		t.Fatal("redaction mutated the input report")
+	}
 }
 
 func TestLoadReadsSanitizedReportWithoutConcreteEvidencePayloads(t *testing.T) {
@@ -67,6 +70,7 @@ func TestCompareReportsHealthMetricsAndNewIntelOnlyApps(t *testing.T) {
 		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 40}},
 		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{SwapUsedBytes: 1 << 30}},
 		{ID: report.EvidenceScan, Status: report.StatusOK, Data: report.ScanData{Apps: []report.ScannedApp{{Name: "Example", Architectures: []string{"arm64"}}}}},
+		{ID: report.EvidenceStorageDetail, Status: report.StatusOK, Data: report.StorageDetailsData{Categories: []report.StorageCategory{{Name: "Downloads", Bytes: 10}}}},
 	}
 	before.Findings = []report.Finding{{Code: "scan.intel_only", Subjects: []string{"Existing"}}}
 	after := report.New("doctor", "this Mac")
@@ -75,11 +79,12 @@ func TestCompareReportsHealthMetricsAndNewIntelOnlyApps(t *testing.T) {
 		{ID: report.EvidenceStorage, Status: report.StatusOK, Data: report.StorageData{AvailablePercent: 20}},
 		{ID: report.EvidenceMemory, Status: report.StatusOK, Data: report.MemoryData{SwapUsedBytes: 3 << 30}},
 		{ID: report.EvidenceScan, Status: report.StatusOK, Data: report.ScanData{Apps: []report.ScannedApp{{Name: "Example", Architectures: []string{"x86_64"}}}}},
+		{ID: report.EvidenceStorageDetail, Status: report.StatusOK, Data: report.StorageDetailsData{Categories: []report.StorageCategory{{Name: "Downloads", Bytes: 20}}}},
 	}
 	after.Findings = []report.Finding{{Code: "scan.intel_only", Subjects: []string{"Existing", "Example"}}}
 
 	comparison := reportutil.Compare(before, after)
-	if len(comparison.MetricChanges) < 2 || len(comparison.NewIntelOnly) != 1 || comparison.NewIntelOnly[0] != "Example" {
+	if len(comparison.MetricChanges) < 3 || len(comparison.NewIntelOnly) != 1 || comparison.NewIntelOnly[0] != "Example" {
 		t.Fatalf("comparison=%#v", comparison)
 	}
 }

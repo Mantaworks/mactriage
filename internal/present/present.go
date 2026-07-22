@@ -179,6 +179,11 @@ func doctorSnapshot(w io.Writer, r report.Report) {
 				networkFact(data.DNSStatus, data.DNSResolved, "resolved", "not resolved"),
 				networkFact(data.HTTPSStatus, data.HTTPSReachable, "reachable", "not reachable"),
 				networkFact(data.HTTPSStatus, data.TLSValid, "valid", "not valid"))
+			if data.InterfaceStatus != "" || data.DNSConfigStatus != "" {
+				fmt.Fprintf(w, "            interface %s · Wi-Fi %s · %d DNS servers · clock year %d\n",
+					networkFact(data.InterfaceStatus, data.ActiveInterface && !data.SelfAssigned, "active", "unavailable"),
+					networkFact(data.WiFiStatus, data.WiFiPowered && data.WiFiAssociated, "connected", "not connected"), data.DNSServerCount, data.ClockYear)
+			}
 		case report.ScanData:
 			fmt.Fprintf(w, "  Apps      %d inspected\n", len(data.Apps))
 		case report.StartupItemsData:
@@ -190,10 +195,12 @@ func doctorSnapshot(w io.Writer, r report.Report) {
 		case report.ThermalData:
 			fmt.Fprintf(w, "  Thermal   CPU limit %d%% · warning recorded %t\n", data.CPUSpeedLimit, data.WarningRecorded)
 		case report.BackupData:
-			if data.Configured && data.HasBackup {
+			if !data.Configured {
+				fmt.Fprintf(w, "  Backup    Time Machine is not configured\n")
+			} else if data.HasBackup {
 				fmt.Fprintf(w, "  Backup    latest backup %.1f hours ago\n", data.LatestAgeHours)
 			} else {
-				fmt.Fprintf(w, "  Backup    no recent backup was observed\n")
+				fmt.Fprintf(w, "  Backup    configured · latest backup was unavailable\n")
 			}
 		}
 	}
