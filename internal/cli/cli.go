@@ -14,6 +14,7 @@ import (
 
 	"github.com/Mantaworks/mactriage/internal/action"
 	"github.com/Mantaworks/mactriage/internal/diagnosis"
+	"github.com/Mantaworks/mactriage/internal/localize"
 	"github.com/Mantaworks/mactriage/internal/macos"
 	"github.com/Mantaworks/mactriage/internal/platform"
 	"github.com/Mantaworks/mactriage/internal/present"
@@ -632,6 +633,6 @@ func (a *application) renderReportOnly(r report.Report) error {
 	if a.opts.json {
 		return present.JSON(a.config.Out, r)
 	}
-	present.Human(a.config.Out, r, present.Style{Color: a.color(), Width: terminalWidth()})
+	present.Human(a.config.Out, r, present.Style{Color: a.color(), Width: terminalWidth(), Messages: localize.Default()})
 	return nil
 }

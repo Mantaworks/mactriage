@@ -2,6 +2,12 @@
 
 All notable user-facing changes to mactriage are documented here.
 
+## Unreleased
+
+- Added typed Doctor check identifiers with familiar `--only`/`--skip` aliases while preserving canonical names and error messages.
+- Split Doctor probes into focused storage, performance, services, event, and startup modules without changing report behavior.
+- Added an embedded localization boundary for the guided menu, first-run help, and human verdicts, plus a contributor translation workflow and pseudo-locale coverage checks. JSON and diagnostic identifiers remain locale-independent.
+
 ## v0.4.0 — The Follow-Through Release
 
 - Added Quick, Full, and Fleet Doctor profiles with explicit verdicts, case IDs, top-three next steps, and unknown-check labels.

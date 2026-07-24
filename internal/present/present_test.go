@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Mantaworks/mactriage/internal/localize"
 	"github.com/Mantaworks/mactriage/internal/present"
 	"github.com/Mantaworks/mactriage/internal/report"
 )
@@ -35,6 +36,24 @@ func TestHumanPlainUsesTextSeverityLabels(t *testing.T) {
 	present.Human(&out, r, present.Style{Color: false})
 	if !strings.Contains(out.String(), "ERROR") || strings.Contains(out.String(), "\x1b[") {
 		t.Fatalf("unexpected plain output: %q", out.String())
+	}
+}
+
+func TestHumanVerdictUsesSelectedMessageCatalog(t *testing.T) {
+	r := report.New("doctor", "this Mac")
+	var out bytes.Buffer
+	present.Human(&out, r, present.Style{Messages: localize.For("en-XA")})
+	if !strings.Contains(out.String(), "[!! LOOKS GOOD !!]") {
+		t.Fatalf("localized verdict missing: %q", out.String())
+	}
+}
+
+func TestGettingStartedUsesSelectedMessageCatalog(t *testing.T) {
+	var out bytes.Buffer
+	present.GettingStartedWithMessages(&out, false, localize.For("en-XA"))
+	if !strings.Contains(out.String(), "[!! What would you like to troubleshoot? !!]") ||
+		!strings.Contains(out.String(), "[!! Give my Mac a quick check !!]") {
+		t.Fatalf("localized first-run copy missing: %q", out.String())
 	}
 }
 
