@@ -92,8 +92,8 @@ func (a *application) doctorCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&severity, "severity", "info", "minimum finding severity: info, warning, error, or critical")
-	cmd.Flags().StringSliceVar(&only, "only", nil, "run only these checks: "+strings.Join(macos.DoctorChecks, ","))
-	cmd.Flags().StringSliceVar(&skip, "skip", nil, "skip these checks: "+strings.Join(macos.DoctorChecks, ","))
+	cmd.Flags().StringSliceVar(&only, "only", nil, "run only these checks: "+strings.Join(macos.DoctorCheckNames(), ","))
+	cmd.Flags().StringSliceVar(&skip, "skip", nil, "skip these checks: "+strings.Join(macos.DoctorCheckNames(), ","))
 	cmd.Flags().BoolVar(&fix, "fix", false, "interactively offer eligible safe actions (each still requires confirmation)")
 	cmd.Flags().StringVar(&profile, "profile", "full", "check profile: quick, full, or fleet")
 	cmd.Flags().BoolVar(&quick, "quick", false, "run the fast everyday check profile")

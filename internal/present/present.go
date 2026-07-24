@@ -9,12 +9,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Mantaworks/mactriage/internal/localize"
 	"github.com/Mantaworks/mactriage/internal/report"
 )
 
 type Style struct {
-	Color bool
-	Width int
+	Color    bool
+	Width    int
+	Messages localize.Messages
 }
 
 func JSON(w io.Writer, r report.Report) error {
@@ -40,7 +42,7 @@ func Human(w io.Writer, r report.Report, style Style) {
 		title += " · " + r.Target
 	}
 	fmt.Fprintln(w, decorate(title, "12", true, style.Color))
-	fmt.Fprintf(w, "%s  Case %s\n", decorate(verdict(r), verdictColor(r), true, style.Color), r.CaseID)
+	fmt.Fprintf(w, "%s  Case %s\n", decorate(verdict(r, style.Messages), verdictColor(r), true, style.Color), r.CaseID)
 	fmt.Fprintf(w, "Command: %s   Evidence: %d   Completeness: %s\n", r.Command, len(r.Evidence), strings.ToUpper(string(r.Completeness)))
 	if r.Command == "doctor" {
 		doctorSnapshot(w, r)
@@ -118,28 +120,32 @@ func healthDetails(w io.Writer, r report.Report) {
 	}
 }
 
-func verdict(r report.Report) string {
+func verdict(r report.Report, messages localize.Messages) string {
+	return messages.Text(verdictKey(r))
+}
+
+func verdictKey(r report.Report) localize.MessageID {
 	for _, f := range r.Findings {
 		if f.Severity == report.Critical || f.Severity == report.Error {
-			return "NEEDS ATTENTION"
+			return localize.VerdictNeedsAttention
 		}
 	}
 	for _, f := range r.Findings {
 		if f.Severity == report.Warning {
-			return "CHECK RECOMMENDED"
+			return localize.VerdictCheckRecommended
 		}
 	}
 	if r.Completeness == report.Partial {
-		return "INCOMPLETE"
+		return localize.VerdictIncomplete
 	}
-	return "LOOKS GOOD"
+	return localize.VerdictLooksGood
 }
 
 func verdictColor(r report.Report) string {
-	switch verdict(r) {
-	case "NEEDS ATTENTION":
+	switch verdictKey(r) {
+	case localize.VerdictNeedsAttention:
 		return "9"
-	case "CHECK RECOMMENDED", "INCOMPLETE":
+	case localize.VerdictCheckRecommended, localize.VerdictIncomplete:
 		return "11"
 	default:
 		return "10"

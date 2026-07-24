@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/Mantaworks/mactriage/internal/localize"
 	"github.com/charmbracelet/huh"
 )
 
@@ -14,48 +15,56 @@ type HomeChoice struct {
 }
 
 func GettingStarted(w io.Writer, color bool) {
-	name := "mactriage"
-	tagline := "Everyday Mac troubleshooting, explained in plain language."
+	GettingStartedWithMessages(w, color, localize.Default())
+}
+
+func GettingStartedWithMessages(w io.Writer, color bool, messages localize.Messages) {
+	name := messages.Text(localize.AppName)
+	tagline := messages.Text(localize.HomeTagline)
 	if color {
 		name = decorate(name, "12", true, true)
 		tagline = decorate(tagline, "8", false, true)
 	}
-	fmt.Fprintf(w, "%s\n%s\n\nWhat would you like to troubleshoot?\n\n", name, tagline)
+	fmt.Fprintf(w, "%s\n%s\n\n%s\n\n", name, tagline, messages.Text(localize.HomePrompt))
 	task := func(label, command string) {
 		fmt.Fprintf(w, "  %s %-23s %s\n", decorate("◆", "12", true, color), label, decorate(command, "8", false, color))
 	}
-	task("Give my Mac a quick check", "mactriage doctor --quick")
-	task("Storage is getting full", "mactriage storage --details")
-	task("App will not open", "mactriage diagnose <app>")
-	task("App is frozen or slow", "mactriage hang <app|pid>")
-	task("Internet or network trouble", "mactriage network [host]")
-	task("Permission problem", "mactriage permissions <app>")
-	task("Check installed apps", "mactriage scan")
-	task("Create a support report", "mactriage share <app|report>")
-	fmt.Fprintln(w, "\nRun mactriage in a terminal for the guided menu, or mactriage --help for every command.")
+	task(messages.Text(localize.GettingStartedQuick), "mactriage doctor --quick")
+	task(messages.Text(localize.GettingStartedStorage), "mactriage storage --details")
+	task(messages.Text(localize.GettingStartedDiagnose), "mactriage diagnose <app>")
+	task(messages.Text(localize.GettingStartedHang), "mactriage hang <app|pid>")
+	task(messages.Text(localize.GettingStartedNetwork), "mactriage network [host]")
+	task(messages.Text(localize.GettingStartedPermissions), "mactriage permissions <app>")
+	task(messages.Text(localize.GettingStartedScan), "mactriage scan")
+	task(messages.Text(localize.GettingStartedShare), "mactriage share <app|report>")
+	fmt.Fprintln(w, "\n"+messages.Text(localize.GettingStartedHint))
 }
 
 func Home(accessible bool) (HomeChoice, error) {
+	return HomeWithMessages(accessible, localize.Default())
+}
+
+func HomeWithMessages(accessible bool, messages localize.Messages) (HomeChoice, error) {
 	var task string
 	options := []huh.Option[string]{
-		huh.NewOption("My Mac feels slow", "doctor"),
-		huh.NewOption("Storage is getting full", "storage"),
-		huh.NewOption("Review startup and background items", "startup"),
-		huh.NewOption("Battery, heat, or backups", "doctor-health"),
-		huh.NewOption("An app will not open", "diagnose"),
-		huh.NewOption("An app is frozen or slow", "hang"),
-		huh.NewOption("Internet or network trouble", "network"),
-		huh.NewOption("An app cannot access something", "permissions"),
-		huh.NewOption("Safely relaunch an app", "relaunch"),
-		huh.NewOption("Compare with an earlier healthy state", "baseline-compare"),
-		huh.NewOption("Create a support report", "share"),
-		huh.NewOption("Check all installed apps", "scan"),
-		huh.NewOption("Check Mac resource pressure", "system"),
-		huh.NewOption("Watch a running process", "watch"),
-		huh.NewOption("Create a support bundle", "collect"),
-		huh.NewOption("Explain a diagnostic code", "explain"),
+		huh.NewOption(messages.Text(localize.HomeOptionDoctor), "doctor"),
+		huh.NewOption(messages.Text(localize.HomeOptionStorage), "storage"),
+		huh.NewOption(messages.Text(localize.HomeOptionStartup), "startup"),
+		huh.NewOption(messages.Text(localize.HomeOptionDoctorHealth), "doctor-health"),
+		huh.NewOption(messages.Text(localize.HomeOptionDiagnose), "diagnose"),
+		huh.NewOption(messages.Text(localize.HomeOptionHang), "hang"),
+		huh.NewOption(messages.Text(localize.HomeOptionNetwork), "network"),
+		huh.NewOption(messages.Text(localize.HomeOptionPermissions), "permissions"),
+		huh.NewOption(messages.Text(localize.HomeOptionRelaunch), "relaunch"),
+		huh.NewOption(messages.Text(localize.HomeOptionBaselineCompare), "baseline-compare"),
+		huh.NewOption(messages.Text(localize.HomeOptionShare), "share"),
+		huh.NewOption(messages.Text(localize.HomeOptionScan), "scan"),
+		huh.NewOption(messages.Text(localize.HomeOptionSystem), "system"),
+		huh.NewOption(messages.Text(localize.HomeOptionWatch), "watch"),
+		huh.NewOption(messages.Text(localize.HomeOptionCollect), "collect"),
+		huh.NewOption(messages.Text(localize.HomeOptionExplain), "explain"),
 	}
-	selectField := huh.NewSelect[string]().Title("What would you like to troubleshoot?").Options(options...).Value(&task)
+	selectField := huh.NewSelect[string]().Title(messages.Text(localize.HomePrompt)).Options(options...).Value(&task)
 	form := huh.NewForm(huh.NewGroup(selectField)).WithShowHelp(true).WithShowErrors(true)
 	if accessible {
 		form = form.WithAccessible(true)
@@ -66,23 +75,23 @@ func Home(accessible bool) (HomeChoice, error) {
 	if task == "doctor" || task == "doctor-health" || task == "storage" || task == "startup" || task == "system" || task == "scan" {
 		return HomeChoice{Task: task}, nil
 	}
-	label := "Application name, bundle ID, or .app path"
-	placeholder := "Safari, com.apple.Safari, or /Applications/Safari.app"
+	label := messages.Text(localize.HomeInputApplicationTitle)
+	placeholder := messages.Text(localize.HomeInputApplicationHint)
 	if task == "watch" || task == "hang" {
-		label = "Process name or PID"
-		placeholder = "Discord or 497"
+		label = messages.Text(localize.HomeInputProcessTitle)
+		placeholder = messages.Text(localize.HomeInputProcessHint)
 	} else if task == "explain" {
-		label = "Diagnostic code"
-		placeholder = "gatekeeper.rejected"
+		label = messages.Text(localize.HomeInputCodeTitle)
+		placeholder = messages.Text(localize.HomeInputCodeHint)
 	} else if task == "network" {
-		label = "Hostname (leave blank to test example.com)"
-		placeholder = "example.com"
+		label = messages.Text(localize.HomeInputNetworkTitle)
+		placeholder = messages.Text(localize.HomeInputNetworkHint)
 	} else if task == "baseline-compare" {
-		label = "Saved baseline name"
-		placeholder = "healthy-morning"
+		label = messages.Text(localize.HomeInputBaselineTitle)
+		placeholder = messages.Text(localize.HomeInputBaselineHint)
 	} else if task == "share" {
-		label = "Application name or report.json path"
-		placeholder = "Safari or ./mactriage-report.json"
+		label = messages.Text(localize.HomeInputShareTitle)
+		placeholder = messages.Text(localize.HomeInputShareHint)
 	}
 	var target string
 	input := huh.NewInput().Title(label).Placeholder(placeholder).Value(&target).Validate(func(value string) error {
@@ -90,7 +99,7 @@ func Home(accessible bool) (HomeChoice, error) {
 			return nil
 		}
 		if strings.TrimSpace(value) == "" {
-			return fmt.Errorf("a value is required")
+			return fmt.Errorf("%s", messages.Text(localize.HomeInputRequired))
 		}
 		return nil
 	})

@@ -71,6 +71,10 @@ The result starts with `LOOKS GOOD`, `CHECK RECOMMENDED`, `NEEDS ATTENTION`, or 
 
 The demo is reproducible from [`docs/demo.tape`](docs/demo.tape) with [VHS](https://github.com/charmbracelet/vhs).
 
+### Languages and translations
+
+Guided-menu copy, first-run help, and human verdicts use an embedded message catalog selected from the standard locale environment. Machine-readable JSON fields, evidence IDs, finding codes, commands, and flags remain stable and English-only. English is currently the supported natural-language catalog; contributors can follow the [translation workflow](docs/localization.md) to add another language.
+
 ## The Doctor Command
 
 Run a bounded, read-only health check across the Mac:
@@ -87,6 +91,8 @@ mactriage doctor --json --output doctor.json
 ```
 
 Quick Doctor checks startup-disk capacity, memory and swap pressure, CPU load, descriptor pressure, core services, and network health. Full Doctor also checks cached updates, crashes, restart loops, startup items, application compatibility, battery condition, thermal limits, and Time Machine freshness. Fleet omits update availability for a more stable automation contract. Doctor's compatibility pass skips deep signature verification; use `mactriage scan` for that slower integrity check.
+
+The `--only` and `--skip` interfaces retain their canonical names and also accept practical aliases such as `disk`, `ram`, `fds`, `login-items`, and `time-machine`.
 
 `doctor --fix` may offer to open Storage, Network, Login Items, Battery, Time Machine, Software Update, Privacy & Security, or Activity Monitor. Every action is explained, separately confirmed, defaults to No, and is verified. It never deletes files, removes login items, installs an update, or changes a system setting.
 

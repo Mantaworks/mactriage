@@ -133,6 +133,22 @@ func TestDoctorSupportsCheckAndSeverityFiltersInJSON(t *testing.T) {
 	}
 }
 
+func TestHumanDoctorUsesLocaleEnvironmentWithoutChangingJSON(t *testing.T) {
+	t.Setenv("LC_ALL", "en_XA")
+	var out, errOut bytes.Buffer
+	code := cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: doctorCLIRunner{}}, []string{"--plain", "doctor", "--only", "storage"})
+	if code != 1 || !strings.Contains(out.String(), "[!! NEEDS ATTENTION !!]") {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+
+	out.Reset()
+	errOut.Reset()
+	code = cli.Execute(context.Background(), cli.Config{Out: &out, Err: &errOut, Runner: doctorCLIRunner{}}, []string{"--json", "doctor", "--only", "storage"})
+	if code != 1 || strings.Contains(out.String(), "[!!") || !strings.Contains(out.String(), `"schema_version": "1"`) {
+		t.Fatalf("localized environment changed JSON: code=%d stdout=%q stderr=%q", code, out.String(), errOut.String())
+	}
+}
+
 type doctorCLIRunner struct{ systemRunner }
 
 func (doctorCLIRunner) Run(ctx context.Context, path string, args ...string) platform.Result {

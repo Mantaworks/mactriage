@@ -42,8 +42,8 @@ func TestDoctorOnlyCollectsSelectedChecks(t *testing.T) {
 	}
 }
 
-func TestDoctorQuickProfileUsesBoundedEverydayChecks(t *testing.T) {
-	r, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Profile: macos.DoctorProfileQuick})
+func TestDoctorCheckAliasesSelectCanonicalChecks(t *testing.T) {
+	r, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Only: []string{"disk", "ram", "fds", "login-items", "time-machine"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,11 +51,82 @@ func TestDoctorQuickProfileUsesBoundedEverydayChecks(t *testing.T) {
 	for _, evidence := range r.Evidence {
 		seen[evidence.ID] = true
 	}
-	if !seen[report.EvidenceStorage] || !seen[report.EvidenceNetwork] {
-		t.Fatalf("missing quick evidence: %#v", seen)
+	for _, id := range []report.EvidenceID{
+		report.EvidenceStorage,
+		report.EvidenceMemory,
+		report.EvidenceLimits,
+		report.EvidenceStartupItems,
+		report.EvidenceBackup,
+	} {
+		if !seen[id] {
+			t.Errorf("alias did not select canonical evidence %q: %#v", id, seen)
+		}
 	}
-	if seen[report.EvidenceBattery] || seen[report.EvidenceUpdates] {
-		t.Fatalf("quick profile ran full checks: %#v", seen)
+	if len(r.Evidence) != 5 {
+		t.Fatalf("aliases selected %d checks, want 5: %#v", len(r.Evidence), seen)
+	}
+}
+
+func TestDoctorRejectsUnknownCheckWithStableError(t *testing.T) {
+	_, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Only: []string{"mystery"}})
+	if err == nil || err.Error() != `unknown doctor check "mystery"` {
+		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestDoctorProfilesSelectTheirDocumentedChecks(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile macos.DoctorProfile
+		require []report.EvidenceID
+		exclude []report.EvidenceID
+	}{
+		{
+			name:    "quick",
+			profile: macos.DoctorProfileQuick,
+			require: []report.EvidenceID{report.EvidenceStorage, report.EvidenceNetwork},
+			exclude: []report.EvidenceID{report.EvidenceBattery, report.EvidenceUpdates},
+		},
+		{
+			name:    "full",
+			profile: macos.DoctorProfileFull,
+			require: []report.EvidenceID{report.EvidenceStorage, report.EvidenceUpdates, report.EvidenceBattery},
+		},
+		{
+			name:    "fleet",
+			profile: macos.DoctorProfileFleet,
+			require: []report.EvidenceID{report.EvidenceStorage, report.EvidenceBattery},
+			exclude: []report.EvidenceID{report.EvidenceUpdates},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			r, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Profile: test.profile})
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := map[report.EvidenceID]bool{}
+			for _, evidence := range r.Evidence {
+				seen[evidence.ID] = true
+			}
+			for _, id := range test.require {
+				if !seen[id] {
+					t.Errorf("profile %q omitted %q: %#v", test.profile, id, seen)
+				}
+			}
+			for _, id := range test.exclude {
+				if seen[id] {
+					t.Errorf("profile %q unexpectedly ran %q: %#v", test.profile, id, seen)
+				}
+			}
+		})
+	}
+}
+
+func TestDoctorRejectsUnknownProfileWithStableError(t *testing.T) {
+	_, err := (macos.Doctor{Runner: doctorRunner{}}).Inspect(context.Background(), macos.DoctorOptions{Profile: "mystery"})
+	if err == nil || err.Error() != `unknown doctor profile "mystery"` {
+		t.Fatalf("error=%v", err)
 	}
 }
 
