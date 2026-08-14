@@ -1,0 +1,4 @@
+Process: Synthetic Fixture
+Identifier: dev.example.fixture.crash
+Exception Type: EXC_RESOURCE (SIGKILL)
+Termination Reason: Namespace RESOURCE, Code 0x8badf00d

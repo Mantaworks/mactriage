@@ -1,0 +1,8 @@
+Load command 1
+          cmd LC_RPATH
+      cmdsize 48
+         path @loader_path/../Frameworks (offset 12)
+Load command 2
+          cmd LC_RPATH
+      cmdsize 48
+         path @executable_path/../Shared (offset 12)

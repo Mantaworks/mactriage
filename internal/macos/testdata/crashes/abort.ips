@@ -1,0 +1,2 @@
+{"app_name":"Synthetic Fixture","bundleID":"dev.example.fixture.crash"}
+{"termination":{"namespace":"SIGNAL","code":6,"indicator":"Abort trap"},"exception":{"signal":"SIGABRT"}}

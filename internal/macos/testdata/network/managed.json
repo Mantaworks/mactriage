@@ -1,0 +1,15 @@
+{
+  "/usr/bin/dscacheutil": {"stdout":"name: example.com\nip_address: synthetic-address\n"},
+  "/sbin/route": {"stdout":"gateway: managed-gateway\ninterface: en7\n"},
+  "/usr/sbin/ipconfig": {"stdout":"managed-address\n"},
+  "/usr/sbin/networksetup": {"stdout":"Hardware Port: Ethernet\nDevice: en7\n"},
+  "/usr/sbin/scutil --dns": {"stdout":"resolver #1\n  nameserver[0]\nresolver #2\n  nameserver[0]\n"},
+  "/usr/sbin/scutil --proxy": {"stdout":"<dictionary> {\n  HTTPEnable : 1\n  HTTPProxy : proxy.example.invalid\n}\n"},
+  "/sbin/ifconfig": {"stdout":"lo0 en7 utun4\n"},
+  "/usr/bin/curl http://example.com/": {"stdout":"HTTP reachable\n"},
+  "/usr/bin/curl https://example.com/": {"stdout":"HTTPS reachable\n"},
+  "/usr/sbin/lsof": {"stdout":"p10\u0000f12u\u0000tIPv4\u0000f13u\u0000tIPv6\u0000"},
+  "/usr/bin/uname": {"stdout":"arm64\n"},
+  "/usr/bin/sw_vers": {"stdout":"14.5\n"},
+  "/usr/sbin/sysctl": {"stdout":"1\n"}
+}
