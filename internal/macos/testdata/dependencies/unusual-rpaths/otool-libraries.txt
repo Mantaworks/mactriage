@@ -1,0 +1,5 @@
+RPathFixture:
+	@rpath/Primary.framework/Versions/A/Primary (compatibility version 1.0.0, current version 1.0.0)
+	@rpath/libShared.dylib (compatibility version 1.0.0, current version 1.0.0)
+	@loader_path/PlugIns/libAdjacent.dylib (compatibility version 1.0.0, current version 1.0.0)
+	@executable_path/../Frameworks/Primary.framework/Versions/A/Primary (compatibility version 1.0.0, current version 1.0.0)

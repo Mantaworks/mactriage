@@ -1,0 +1,4 @@
+{"process":"tccd","eventMessage":"Camera access denied for dev.example.fixture.permission"}
+{"process":"tccd","eventMessage":"Microphone access not authorized for dev.example.fixture.permission"}
+{"process":"tccd","eventMessage":"Camera access denied for dev.example.fixture.unrelated"}
+{"process":"synthetic-noise","eventMessage":"Diagnostic message with no privacy decision"}

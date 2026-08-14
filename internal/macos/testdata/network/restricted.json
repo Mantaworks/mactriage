@@ -1,0 +1,13 @@
+{
+  "/usr/bin/dscacheutil": {"error":"managed policy denied lookup","exit_code":-1},
+  "/sbin/route": {"stdout":"gateway: managed-gateway\ninterface: en7\n"},
+  "/usr/sbin/ipconfig": {"error":"address unavailable","exit_code":-1},
+  "/usr/sbin/networksetup": {"error":"configuration unavailable","exit_code":-1},
+  "/usr/sbin/scutil": {"error":"managed policy denied configuration","exit_code":-1},
+  "/sbin/ifconfig": {"error":"interfaces unavailable","exit_code":-1},
+  "/usr/bin/curl": {"error":"request deadline","exit_code":-1,"timed_out":true},
+  "/usr/sbin/lsof": {"error":"permission denied","exit_code":-1},
+  "/usr/bin/uname": {"stdout":"arm64\n"},
+  "/usr/bin/sw_vers": {"stdout":"14.5\n"},
+  "/usr/sbin/sysctl": {"stdout":"1\n"}
+}

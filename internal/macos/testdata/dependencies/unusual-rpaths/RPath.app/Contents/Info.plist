@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleName</key><string>RPath Fixture</string>
+<key>CFBundleIdentifier</key><string>dev.example.fixture.rpath</string>
+<key>CFBundleExecutable</key><string>RPathFixture</string>
+<key>LSMinimumSystemVersion</key><string>13.0</string>
+</dict></plist>

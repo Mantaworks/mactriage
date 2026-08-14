@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleName</key><string>Synthetic Agent</string>
+<key>CFBundleIdentifier</key><string>dev.example.fixture.helperheavy.agent</string>
+<key>CFBundleExecutable</key><string>SyntheticAgent</string>
+</dict></plist>

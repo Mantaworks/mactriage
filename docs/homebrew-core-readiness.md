@@ -6,13 +6,13 @@ This is a readiness record, not a growth target. mactriage does not collect tele
 
 ## Official eligibility
 
-Homebrew's [Package Acceptance Policy](https://docs.brew.sh/Package-Acceptance-Policy) and [Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae) are authoritative. As of 2026-07-24:
+Homebrew's [Package Acceptance Policy](https://docs.brew.sh/Package-Acceptance-Policy) and [Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae) are authoritative. Last evaluated 2026-08-14:
 
 | Requirement | Status | Evidence |
 | --- | --- | --- |
 | Public project and homepage | Met | Public GitHub repository and project README |
 | Active maintenance and no known unpatched vulnerability | Met today | CI, CodeQL, `govulncheck`, security policy, and maintained releases |
-| Repository at least 30 days old | Not yet | Repository created 2026-07-22 |
+| Repository at least 30 days old | Not yet | Repository created 2026-07-22; eligible for this criterion after 2026-08-21 |
 | Owner-submission notability | Not yet | Policy normally requires 225 stars, 90 forks, or 90 watchers; current counts are 0/0/0 |
 | Open-source, compatible license | Met | MIT |
 | Stable immutable release | Met | Tagged GitHub releases with checksums, SBOMs, and attestations |
@@ -46,4 +46,4 @@ When every gate above is met:
 3. Inspect the installed files and command output manually.
 4. Open a single-formula Core pull request, disclose AI assistance as required by Homebrew's contribution policy, and remain available to address maintainer feedback.
 
-Until then, keep issue #12 open and update this table only with verifiable public evidence.
+Until then, the supported third-party tap remains the right distribution channel. Re-evaluate this record during stable-release preparation and open a focused submission issue only after every gate is supported by verifiable public evidence. A permanently open tracking issue is not itself evidence of readiness.
